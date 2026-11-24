@@ -2,7 +2,7 @@ import enUS from "@/i18n/en-US";
 import zhCN from "@/i18n/zh-CN";
 import zhTW from "@/i18n/zh-TW";
 import type { I18nLang } from "@/type/i18n";
-import { getLanguage } from "@/utils/vditor-utils";
+import { getLanguage } from "@/utils/language-utils";
 
 const langDict = {
   zh_CN: zhCN,

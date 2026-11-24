@@ -24,7 +24,7 @@ import {
   type EditorSong,
 } from "@/utils/marker-utils";
 import { quickInsertInject } from "@/utils/quick-insert-utils";
-import { getOptions, renderHTMLFromRaw } from "@/utils/vditor-utils";
+import { getOptions, renderHTMLFromMarkdownHtml } from "@/utils/vditor-utils";
 import type { Attachment } from "@halo-dev/api-client";
 import { VLoading } from "@halo-dev/components";
 import type { AttachmentLike } from "@halo-dev/console-shared";
@@ -120,7 +120,8 @@ const debounceOnUpdate = async () => {
   const customRenders = vditor.value?.vditor?.options?.customRenders;
   let html = "";
   try {
-    html = await renderHTMLFromRaw(rawValue, config, customRenders);
+    const rendered = await Vditor.md2html(rawValue);
+    html = renderHTMLFromMarkdownHtml(rendered, config, customRenders);
   } catch (error) {
     console.error("[Vditor] 渲染 HTML 失败", error);
   }

@@ -8,10 +8,11 @@ import type { Options, QuickInsert, Schema } from "@/type/editor";
 import type { EditorConfig } from "@/utils/config-utils";
 import { addScript, addStyleSheet } from "@/utils/dom-utils";
 import { t } from "@/utils/i18n-utils";
+import { getLanguage } from "@/utils/language-utils";
 import { renderCustomMarkers } from "@/utils/marker-utils";
 import { mdiGrid, mdiImage } from "@/utils/icon";
 import type { PluginModule } from "@halo-dev/console-shared";
-import Vditor from "vditor";
+import type Vditor from "vditor";
 
 declare const HaloJs: {
   renderHalo: (content: string, cdn: string) => string;
@@ -79,21 +80,6 @@ export function getOptions(options: Options): IOptions {
     customRenders: getCustomRenders(options),
     customWysiwygToolbar() {},
   };
-}
-
-export function getLanguage(lang = "zh-CN"): keyof II18n {
-  switch (lang) {
-    case "zh-CN":
-      return "zh_CN";
-    case "zh-TW":
-      return "zh_TW";
-    case "en-US":
-      return "en_US";
-    case "es":
-      return "en_US";
-    default:
-      return "zh_CN";
-  }
 }
 
 function getToolbar(
@@ -279,13 +265,12 @@ function getCustomRenders(options: Options):
  * @param config Editor Config, 可选
  * @returns html
  */
-export async function renderHTMLFromRaw(
-  raw: string,
+export function renderHTMLFromMarkdownHtml(
+  html: string,
   config?: EditorConfig,
   customRenders?: { language: string }[],
-): Promise<string> {
-  let value = await Vditor.md2html(raw);
-  return postProcessHTML(value, config, customRenders);
+): string {
+  return postProcessHTML(html, config, customRenders);
 }
 
 function postProcessHTML(value: string, config?: EditorConfig, customRenders?: { language: string }[]): string {

@@ -35,6 +35,10 @@ export function escapeHtmlAttribute(value: string | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
+export function buildInlineMusicMarker(song: EditorSong): string {
+  return `::hs-player:v1:${encodeMarkerData(song)}::`;
+}
+
 export function buildInlineMusicHtml(song: EditorSong): string {
   return [
     '<div class="hs-music-player" data-hs-music',
@@ -68,7 +72,7 @@ function replaceParagraphMarker(html: string, name: string, render: (payload: st
   return html.replace(pattern, (_match, payload: string) => render(payload));
 }
 
-function decodeMarkerData<T>(payload: string): T | undefined {
+export function decodeMarkerData<T>(payload: string): T | undefined {
   try {
     return JSON.parse(new TextDecoder().decode(fromBase64Url(payload))) as T;
   } catch {
@@ -96,7 +100,10 @@ export function renderCustomMarkers(html: string): string {
   });
 
   let musicPayloads: string[] = [];
-  [output, musicPayloads] = extractParagraphMarkers(output, "hs-music");
+  [output, musicPayloads] = extractParagraphMarkers(output, "hs-player");
+  let momentMusicPayloads: string[] = [];
+  [output, momentMusicPayloads] = extractParagraphMarkers(output, "hs-music");
+  musicPayloads = musicPayloads.concat(momentMusicPayloads);
 
   let galleryPayloads: string[] = [];
   [output, galleryPayloads] = extractParagraphMarkers(output, "hs-gallery");

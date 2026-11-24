@@ -47,8 +47,16 @@
       });
   }
 
+  function parsePayload(value) {
+    var text = String(value || "").trim();
+    if (text.charAt(0) === "{") return JSON.parse(text);
+    var normalized = text.replace(/-/g, "+").replace(/_/g, "/");
+    var padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(new TextDecoder().decode(fromBase64Url(padded)));
+  }
+
   function decryptText(payloadText, password) {
-    var payload = JSON.parse(payloadText);
+    var payload = parsePayload(payloadText);
     if (!payload || payload.version !== 1 || !payload.salt || !payload.iv || !payload.cipher) {
       throw new Error("密文格式不支持");
     }

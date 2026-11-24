@@ -57,10 +57,12 @@
 | --- | --- | --- |
 | 九宫格 | `::hs-gallery:v1:<base64url>::` | `.hs-moment-gallery`，照片统一放到正文末尾 |
 | 瞬间音乐 | `::hs-music:v1:<base64url>::` | `.hs-music-player`，播放器放到正文末尾、九宫格之前 |
-| 普通音乐 | `<div class="hs-music-player" data-hs-music ...></div>` | 原位置保留的 aplayer 播放器 |
+| 普通音乐 | `::hs-player:v1:<base64url>::` | 同瞬间音乐，统一放到正文末尾、九宫格之前 |
 | 加密内容 | `::hs-secret:v1:<base64url>::` | 原地显示锁定块，访客输入密钥后本地解密 |
 
-工具栏中的「音乐 / 瞬间音乐」从设置里的「全部歌曲接口」读取歌曲列表，默认使用 `api.aplayer-backend` 插件的 `/apis/api.aplayer-backend/v1alpha1/songs`。「源码」按钮或 `Ctrl/Cmd + /` 可以在 Vditor 的编辑模式与源码模式之间切换。
+标记里的 `<base64url>` 只是 JSON 数据的安全编码（歌名、歌手、URL、图片地址等），**不是加密**，不需要密钥。九宫格与音乐标记统一追加到正文末尾，编辑器里只以源码文本形式出现，不插入渲染组件，以免打断写作节奏；发布时由渲染管线展开为真实结构。历史文章中已有的 `<div class="hs-music-player" ...>` 仍然按原位置渲染。
+
+工具栏中的「音乐 / 瞬间音乐」从设置里的「全部歌曲接口」读取歌曲列表，默认使用 `api.aplayer-backend` 插件的 `/apis/api.aplayer-backend/v1alpha1/songs`。「加密」会加密选中的 Markdown 源码，「解密」可以在编辑时把加密块还原回源码（单个加密块时无需选中，多个时需先选中对应块）。「源码」按钮或 `Ctrl/Cmd + /` 可以在 Vditor 的编辑模式与源码模式之间切换。
 
 ### 内容加密
 

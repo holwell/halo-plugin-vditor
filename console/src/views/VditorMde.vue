@@ -4,23 +4,26 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import "vditor/dist/index.css";
 
+import SecretDecryptModal from "@/components/SecretDecryptModal.vue";
 import SongPickerModal from "@/components/SongPickerModal.vue";
 import DebugPanel from "@/model/DebugPanel.vue";
 import TemplateModal from "@/model/TemplateModal.vue";
 import joeProgress from "@/schema/joe-progress";
 import type { Schema } from "@/type/editor";
 import { defaultEditorConfig, type EditorConfig } from "@/utils/config-utils";
-import { encryptText } from "@/utils/crypto-utils";
+import { decryptText, encryptText } from "@/utils/crypto-utils";
 import { getCursor, setCursor } from "@/utils/cursor-utils";
 import { addStyle } from "@/utils/dom-utils";
 import { fetchAllCustomRenderScripts, fetchAllQuickInsert } from "@/utils/fetch-utils";
 import { copyAsHTML } from "@/utils/html-utils";
 import {
   buildGalleryMarker,
-  buildInlineMusicHtml,
+  buildInlineMusicMarker,
   buildMomentMusicMarker,
   buildSecretMarker,
+  decodeMarkerData,
   type EditorSong,
+  type SecretMarkerPayload,
 } from "@/utils/marker-utils";
 import { quickInsertInject } from "@/utils/quick-insert-utils";
 import { getOptions, renderHTML } from "@/utils/vditor-utils";
@@ -53,6 +56,8 @@ const songPickerShow = ref(false);
 const songPickerMode = ref<"inline" | "moment">("inline");
 const songs = ref<EditorSong[]>([]);
 const encrypting = ref(false);
+const secretDecryptShow = ref(false);
+const pendingSecretPayload = ref("");
 const editorConfig = ref<EditorConfig>();
 // 特殊插入框， 当前支持none/tips/git
 // 自定义插入
@@ -113,6 +118,15 @@ const debounceOnUpdate = () => {
   emit("update", value);
 };
 
+// 自定义标记统一追加到正文末尾：不打断写作，不参与编辑器即时渲染
+const appendMarker = (marker: string) => {
+  const current = vditor.value?.getValue() || "";
+  const separator = current.endsWith("\n\n") ? "" : current.endsWith("\n") ? "\n" : "\n\n";
+  vditor.value?.setValue(`${current}${separator}${marker}`);
+  debounceOnUpdate();
+  vditor.value?.focus();
+};
+
 // 选取附件后处理
 const attachmentSelect = (attachments: AttachmentLike[]) => {
   setCursor(lastSelectionRange);
@@ -130,7 +144,7 @@ const attachmentSelect = (attachments: AttachmentLike[]) => {
       }
     });
     if (!images.length) return;
-    vditor.value?.insertValue(`\n\n${buildGalleryMarker({ images: images.slice(0, 9) })}\n\n`);
+    appendMarker(buildGalleryMarker({ images: images.slice(0, 9) }));
     return;
   }
   attachments.forEach((attachment) => {
@@ -183,14 +197,12 @@ const openSongPicker = async (mode: "inline" | "moment") => {
 };
 
 const selectSong = (song: EditorSong) => {
-  setCursor(lastSelectionRange);
   if (songPickerMode.value === "moment") {
-    vditor.value?.insertValue(`\n\n${buildMomentMusicMarker(song)}\n\n`);
+    appendMarker(buildMomentMusicMarker(song));
   } else {
-    vditor.value?.insertValue(`\n\n${buildInlineMusicHtml(song)}\n\n`);
+    appendMarker(buildInlineMusicMarker(song));
   }
   songPickerShow.value = false;
-  vditor.value?.focus();
 };
 
 const encryptSelection = async () => {
@@ -215,6 +227,51 @@ const encryptSelection = async () => {
     vditor.value?.tip("加密失败，请检查浏览器是否支持 WebCrypto", 3000);
   } finally {
     encrypting.value = false;
+  }
+};
+
+const decryptInEditor = () => {
+  const value = vditor.value?.getValue() || "";
+  const selected = vditor.value?.getSelection() || "";
+  const pattern = /::hs-secret:v1:([A-Za-z0-9_-]+)::/g;
+  const inSelection = pattern.exec(selected);
+  if (inSelection?.[1]) {
+    pendingSecretPayload.value = inSelection[1];
+    secretDecryptShow.value = true;
+    return;
+  }
+  const matches = value.match(/::hs-secret:v1:([A-Za-z0-9_-]+)::/g) || [];
+  if (matches.length === 1) {
+    pendingSecretPayload.value = matches[0].slice("::hs-secret:v1:".length, -2);
+    secretDecryptShow.value = true;
+  } else if (matches.length > 1) {
+    vditor.value?.tip("正文中存在多个加密块，请先选中要解密的加密块", 3000);
+  } else {
+    vditor.value?.tip("正文中没有加密块", 3000);
+  }
+};
+
+const confirmDecrypt = async (password: string) => {
+  if (!password) {
+    vditor.value?.tip("请输入解密密钥", 3000);
+    return;
+  }
+  const payload = decodeMarkerData<SecretMarkerPayload>(pendingSecretPayload.value);
+  if (!payload) {
+    vditor.value?.tip("加密块格式错误", 3000);
+    return;
+  }
+  try {
+    const plain = await decryptText(JSON.stringify(payload), password);
+    const marker = `::hs-secret:v1:${pendingSecretPayload.value}::`;
+    const current = vditor.value?.getValue() || "";
+    vditor.value?.setValue(current.replace(marker, plain));
+    debounceOnUpdate();
+    secretDecryptShow.value = false;
+    vditor.value?.tip("已解密并还原为 Markdown 源码", 2000);
+  } catch (error) {
+    console.error(error);
+    vditor.value?.tip("解密失败，请确认密钥是否正确", 3000);
   }
 };
 
@@ -441,6 +498,9 @@ const update = (val: string | null) => {
       <button type="button" title="加密选中内容" :disabled="encrypting" @click="encryptSelection">
         <span aria-hidden="true">🔒</span><span>{{ encrypting ? "加密中" : "加密" }}</span>
       </button>
+      <button type="button" title="解密并还原加密块" @click="decryptInEditor">
+        <span aria-hidden="true">🔓</span><span>解密</span>
+      </button>
       <button type="button" title="切换源码模式（Ctrl+/）" @click="toggleSourceMode">
         <span aria-hidden="true">⌘</span><span>源码</span>
       </button>
@@ -457,6 +517,11 @@ const update = (val: string | null) => {
       :songs="songs"
       @close="songPickerShow = false"
       @select="selectSong"
+    />
+    <SecretDecryptModal
+      :open="secretDecryptShow"
+      @close="secretDecryptShow = false"
+      @confirm="confirmDecrypt"
     />
 
     <AttachmentSelectorModal

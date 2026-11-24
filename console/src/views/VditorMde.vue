@@ -327,12 +327,12 @@ ${css}
 #plugin-vditor-mde.is-fullscreen .vditor {
   --border-color: var(--hs-vditor-border, #d1d5da);
   --second-color: var(--hs-vditor-muted, rgba(88, 96, 105, 0.36));
-  --panel-background-color: var(--hs-vditor-bg, #fff);
+  --panel-background-color: transparent;
   --panel-shadow: var(--hs-vditor-panel-shadow, 0 1px 2px rgba(0, 0, 0, 0.2));
   --toolbar-background-color: var(--hs-vditor-toolbar-bg, #f6f8fa);
   --toolbar-icon-color: var(--hs-vditor-fg, #586069);
   --toolbar-icon-hover-color: var(--hs-vditor-link, #4285f4);
-  --textarea-background-color: var(--hs-vditor-bg, #fafbfc);
+  --textarea-background-color: transparent;
   --textarea-text-color: var(--hs-vditor-fg, #24292e);
   --resize-icon-color: var(--hs-vditor-fg, #586069);
   --resize-background-color: var(--hs-vditor-toolbar-bg, #f6f8fa);
@@ -720,8 +720,19 @@ const update = (val: string | null) => {
   color: var(--hs-vditor-fg, inherit);
 }
 
+/* 底栏固定在视口底部，不随内容滚动 */
 #plugin-vditor-mde.is-fullscreen .hs-editor-toolbar {
-  position: sticky;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1991;
+  background: var(--hs-vditor-bg, var(--halo-surface, #fff));
+}
+
+/* 给固定底栏留出空间，避免遮挡最后一行 */
+#plugin-vditor-mde.is-fullscreen #vditor {
+  padding-bottom: 56px;
 }
 
 /* 单一背景色：编辑区全部透明，只保留全屏容器的一层底色 */
@@ -758,12 +769,8 @@ const update = (val: string | null) => {
   overflow: visible;
 }
 
-/* 仅全屏下限宽居中，贴近前台阅读宽度；非全屏保持原样 */
-#plugin-vditor-mde.is-fullscreen #vditor {
-  width: 100%;
-  max-width: 680px;
-  margin-inline: auto;
-}
+/* 内容宽度由 Vditor 原生 preview.maxWidth(800) 通过内联 padding 居中，
+   外层保持全宽统一色，这里不再额外限制 #vditor 宽度 */
 
 #plugin-vditor-mde.is-fullscreen .vditor code,
 #plugin-vditor-mde.is-fullscreen .vditor pre {

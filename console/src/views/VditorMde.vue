@@ -327,12 +327,12 @@ ${css}
 #plugin-vditor-mde.is-fullscreen .vditor {
   --border-color: var(--hs-vditor-border, #d1d5da);
   --second-color: var(--hs-vditor-muted, rgba(88, 96, 105, 0.36));
-  --panel-background-color: transparent;
+  --panel-background-color: var(--hs-vditor-bg, #fff);
   --panel-shadow: var(--hs-vditor-panel-shadow, 0 1px 2px rgba(0, 0, 0, 0.2));
   --toolbar-background-color: var(--hs-vditor-toolbar-bg, #f6f8fa);
   --toolbar-icon-color: var(--hs-vditor-fg, #586069);
   --toolbar-icon-hover-color: var(--hs-vditor-link, #4285f4);
-  --textarea-background-color: transparent;
+  --textarea-background-color: var(--hs-vditor-bg, #fff);
   --textarea-text-color: var(--hs-vditor-fg, #24292e);
   --resize-icon-color: var(--hs-vditor-fg, #586069);
   --resize-background-color: var(--hs-vditor-toolbar-bg, #f6f8fa);
@@ -708,44 +708,23 @@ const update = (val: string | null) => {
   min-height: 100%;
 }
 
+/* 全屏 = 非全屏布局 + 放大，只改定位与底色，其余全部复用非全屏样式 */
 #plugin-vditor-mde.is-fullscreen {
   position: fixed;
   inset: 0;
   /* 低于所有弹窗层级（我们的 2050/2200、Halo 的 2000/9999+），保证全屏下弹窗仍可操作 */
   z-index: 1990;
   min-height: 0;
-  /* 全屏容器自身滚动，滚动条出现在视口右侧，而不是编辑区内部 */
-  overflow-y: auto;
-  background: var(--hs-vditor-bg, var(--halo-surface, #fff));
-  color: var(--hs-vditor-fg, inherit);
-}
-
-/* 底栏固定在视口底部，不随内容滚动 */
-#plugin-vditor-mde.is-fullscreen .hs-editor-toolbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 1991;
   background: var(--hs-vditor-bg, var(--halo-surface, #fff));
 }
 
-/* 给固定底栏留出空间，避免遮挡最后一行 */
 #plugin-vditor-mde.is-fullscreen #vditor {
-  padding-bottom: 56px;
+  flex: 1 1 auto;
+  height: auto;
 }
 
-/* 单一背景色：编辑区全部透明，只保留全屏容器的一层底色 */
-#plugin-vditor-mde.is-fullscreen .vditor,
-#plugin-vditor-mde.is-fullscreen .vditor-reset,
-#plugin-vditor-mde.is-fullscreen .vditor-wysiwyg,
-#plugin-vditor-mde.is-fullscreen .vditor-ir,
-#plugin-vditor-mde.is-fullscreen .vditor-sv {
-  --panel-background-color: transparent;
-  --textarea-background-color: transparent;
-  background: transparent;
-  color: var(--hs-vditor-fg, inherit);
-  /* 与主题一致的字体策略：苹方优先 */
+/* 与主题一致的字体策略（苹方优先），只换字体、不改布局 */
+#plugin-vditor-mde.is-fullscreen .vditor-reset {
   font-family: var(
     --hs-vditor-font-family,
     "PingFang SC",
@@ -755,65 +734,6 @@ const update = (val: string | null) => {
     "Microsoft YaHei",
     sans-serif
   );
-}
-
-/* 编辑区不自己滚动、不限制高度，内容自然撑开，由全屏容器提供滚动条 */
-#plugin-vditor-mde.is-fullscreen .vditor,
-#plugin-vditor-mde.is-fullscreen .vditor-reset,
-#plugin-vditor-mde.is-fullscreen .vditor-wysiwyg,
-#plugin-vditor-mde.is-fullscreen .vditor-wysiwyg pre.vditor-reset,
-#plugin-vditor-mde.is-fullscreen .vditor-ir pre.vditor-reset,
-#plugin-vditor-mde.is-fullscreen .vditor-sv {
-  flex: none;
-  height: auto;
-  overflow: visible;
-}
-
-/* 内容宽度由 Vditor 原生 preview.maxWidth(800) 通过内联 padding 居中，
-   外层保持全宽统一色，这里不再额外限制 #vditor 宽度 */
-
-#plugin-vditor-mde.is-fullscreen .vditor code,
-#plugin-vditor-mde.is-fullscreen .vditor pre {
-  background: var(--hs-vditor-code-bg, rgba(0, 0, 0, 0.05)) !important;
-}
-
-#plugin-vditor-mde.is-fullscreen .vditor ::selection {
-  background: var(--hs-vditor-selection, rgba(0, 0, 0, 0.15));
-}
-
-/* 全屏下的滚动条：细、圆角、半透明，跟随 Token 配色 */
-#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar-thumb {
-  background: var(--hs-vditor-scrollbar, var(--hs-vditor-border, rgba(0, 0, 0, 0.2)));
-  border: 2px solid transparent;
-  border-radius: 8px;
-  background-clip: padding-box;
-}
-
-#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar-thumb:hover {
-  background: var(--hs-vditor-link, #3478cd);
-  border: 2px solid transparent;
-  border-radius: 8px;
-  background-clip: padding-box;
-}
-
-#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-/* Firefox 滚动条 */
-#plugin-vditor-mde.is-fullscreen {
-  scrollbar-width: thin;
-  scrollbar-color: var(--hs-vditor-scrollbar, var(--hs-vditor-border, rgba(0, 0, 0, 0.2)))
-    transparent;
 }
 
 #plugin-vditor-mde .hs-vditor-loading {

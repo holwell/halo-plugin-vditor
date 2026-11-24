@@ -730,6 +730,23 @@ const update = (val: string | null) => {
 #plugin-vditor-mde.is-fullscreen .vditor-sv {
   background: var(--hs-vditor-bg, transparent);
   color: var(--hs-vditor-fg, inherit);
+  /* 与主题一致的字体策略：苹方优先 */
+  font-family: var(
+    --hs-vditor-font-family,
+    "PingFang SC",
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Microsoft YaHei",
+    sans-serif
+  );
+}
+
+/* 编辑区限宽居中，贴近前台阅读宽度 */
+#plugin-vditor-mde #vditor {
+  width: 100%;
+  max-width: 680px;
+  margin-inline: auto;
 }
 
 #plugin-vditor-mde.is-fullscreen .vditor code,
@@ -911,8 +928,8 @@ const update = (val: string | null) => {
 
 #plugin-vditor-mde.h1AsTitle .vditor-ir h1:first-child,
 #plugin-vditor-mde.h1AsTitle .vditor-wysiwyg h1:first-child {
-  border-bottom: 2px solid #eaecef;
-  color: #333333;
+  border-bottom: 2px solid var(--hs-vditor-border, var(--heading-border-color, #eaecef));
+  color: var(--hs-vditor-fg, #333333);
   text-align: left;
   text-decoration: none;
   font-size: 2rem;

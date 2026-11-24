@@ -164,7 +164,7 @@ spec:
         - $formkit: repeater
           name: tokens
           label: Token 列表
-          help: '每个 Token 是一套配色变量，全屏时按下方「生效 Token 名称」匹配。支持的变量：--hs-vditor-bg（编辑区背景）、--hs-vditor-fg（正文文字）、--hs-vditor-toolbar-bg（工具栏背景）、--hs-vditor-border（边框/分割线）、--hs-vditor-link（链接）、--hs-vditor-code-bg（代码块背景）、--hs-vditor-selection（选中背景）。每行写一个 CSS 变量，例如 --hs-vditor-bg: #181818;'
+          help: '每个 Token 是一套配色变量，全屏时按下方「生效 Token 名称」匹配。这些变量会同时映射到 Vditor 原生变量（含 IR 模式标记色、标题下边框）与滚动条。支持的变量：--hs-vditor-bg（编辑区背景）、--hs-vditor-fg（正文文字）、--hs-vditor-toolbar-bg（工具栏背景）、--hs-vditor-border（边框/分割线/标题下边框）、--hs-vditor-link（链接/IR 标记）、--hs-vditor-code-bg（代码块背景）、--hs-vditor-selection（选中背景）、--hs-vditor-muted（次要文字/引用）、--hs-vditor-scrollbar（滚动条滑块）、--hs-vditor-panel-shadow（面板阴影）。每行写一个 CSS 变量，例如 --hs-vditor-bg: #181818;'
           value: []
           children:
             - $formkit: text

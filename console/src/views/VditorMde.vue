@@ -318,7 +318,45 @@ const applyFullscreenToken = () => {
   if (!css) return;
   const style = document.createElement("style");
   style.id = FULLSCREEN_STYLE_ID;
-  style.textContent = `#plugin-vditor-mde.is-fullscreen {\n${css}\n}`;
+  // Vditor 原生变量定义在 .vditor 上（会覆盖继承值），必须直接在选择器上映射；
+  // 标题下边框在内容主题里是硬编码颜色，也需要显式覆盖。
+  style.textContent = `
+#plugin-vditor-mde.is-fullscreen {
+${css}
+}
+#plugin-vditor-mde.is-fullscreen .vditor {
+  --border-color: var(--hs-vditor-border, #d1d5da);
+  --second-color: var(--hs-vditor-muted, rgba(88, 96, 105, 0.36));
+  --panel-background-color: var(--hs-vditor-bg, #fff);
+  --panel-shadow: var(--hs-vditor-panel-shadow, 0 1px 2px rgba(0, 0, 0, 0.2));
+  --toolbar-background-color: var(--hs-vditor-toolbar-bg, #f6f8fa);
+  --toolbar-icon-color: var(--hs-vditor-fg, #586069);
+  --toolbar-icon-hover-color: var(--hs-vditor-link, #4285f4);
+  --textarea-background-color: var(--hs-vditor-bg, #fafbfc);
+  --textarea-text-color: var(--hs-vditor-fg, #24292e);
+  --resize-icon-color: var(--hs-vditor-fg, #586069);
+  --resize-background-color: var(--hs-vditor-toolbar-bg, #f6f8fa);
+  --resize-hover-icon-color: var(--hs-vditor-bg, #fff);
+  --resize-hover-background-color: var(--hs-vditor-link, #4285f4);
+  --count-background-color: var(--hs-vditor-selection, rgba(27, 31, 35, 0.05));
+  --heading-border-color: var(--hs-vditor-border, #eaecef);
+  --blockquote-color: var(--hs-vditor-muted, #6a737d);
+  --ir-heading-color: var(--hs-vditor-fg, #660e7a);
+  --ir-title-color: var(--hs-vditor-muted, #808080);
+  --ir-bi-color: var(--hs-vditor-link, #0033b3);
+  --ir-link-color: var(--hs-vditor-link, #008000);
+  --ir-bracket-color: var(--hs-vditor-link, #0000ff);
+  --ir-paren-color: var(--hs-vditor-link, #008000);
+}
+#plugin-vditor-mde.is-fullscreen .vditor-reset h1,
+#plugin-vditor-mde.is-fullscreen .vditor-reset h2,
+#plugin-vditor-mde.is-fullscreen .vditor-reset h3,
+#plugin-vditor-mde.is-fullscreen .vditor-reset h4,
+#plugin-vditor-mde.is-fullscreen .vditor-reset h5,
+#plugin-vditor-mde.is-fullscreen .vditor-reset h6 {
+  border-bottom-color: var(--hs-vditor-border, #eaecef);
+}
+`;
   document.head.appendChild(style);
 };
 
@@ -701,6 +739,41 @@ const update = (val: string | null) => {
 
 #plugin-vditor-mde.is-fullscreen .vditor ::selection {
   background: var(--hs-vditor-selection, rgba(0, 0, 0, 0.15));
+}
+
+/* 全屏下的滚动条：细、圆角、半透明，跟随 Token 配色 */
+#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar-thumb {
+  background: var(--hs-vditor-scrollbar, var(--hs-vditor-border, rgba(0, 0, 0, 0.2)));
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+}
+
+#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar-thumb:hover {
+  background: var(--hs-vditor-link, #3478cd);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+}
+
+#plugin-vditor-mde.is-fullscreen ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox 滚动条 */
+#plugin-vditor-mde.is-fullscreen {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hs-vditor-scrollbar, var(--hs-vditor-border, rgba(0, 0, 0, 0.2)))
+    transparent;
 }
 
 #plugin-vditor-mde.is-fullscreen #vditor {

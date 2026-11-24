@@ -87,10 +87,15 @@ raw 里的九宫格 `::hs-gallery:v1:<base64url>::`、瞬间音乐 `::hs-music:v
 | `--hs-vditor-bg` | 编辑区背景 |
 | `--hs-vditor-fg` | 正文文字颜色 |
 | `--hs-vditor-toolbar-bg` | 工具栏背景 |
-| `--hs-vditor-border` | 边框 / 分割线颜色 |
-| `--hs-vditor-link` | 链接颜色 |
+| `--hs-vditor-border` | 边框 / 分割线 / 标题下边框颜色 |
+| `--hs-vditor-link` | 链接颜色，同时用于 IR 模式标记（括号、链接、强调、标题标记等） |
 | `--hs-vditor-code-bg` | 代码块背景 |
 | `--hs-vditor-selection` | 选中文本 / 按钮悬停背景 |
+| `--hs-vditor-muted` | 次要文字 / 引用块（Vditor `--second-color`、`--blockquote-color`） |
+| `--hs-vditor-scrollbar` | 全屏滚动条滑块颜色，默认取 `--hs-vditor-border` |
+| `--hs-vditor-panel-shadow` | 面板阴影 |
+
+这些变量会被映射到 Vditor 的原生 CSS 变量（`--border-color`、`--heading-border-color`、`--ir-bracket-color`、`--ir-link-color`、`--ir-heading-color` 等），因此 IR / 源码模式的标记色、各级标题的 `border-bottom`、引用块、滚动条都会跟随 Token；未定义的变量保留 Vditor 默认值。
 
 示例：
 

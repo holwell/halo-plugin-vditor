@@ -60,6 +60,8 @@ const songs = ref<EditorSong[]>([]);
 const pendingGallery = ref<EditorGallery>({ images: [] });
 const pendingMomentSongs = ref<EditorSong[]>([]);
 const mediaPreviewShow = ref(false);
+const reopenMediaPreview = ref(false);
+const isFullscreen = ref(false);
 const editorConfig = ref<EditorConfig>();
 // 特殊插入框， 当前支持none/tips/git
 // 自定义插入
@@ -171,6 +173,10 @@ const attachmentSelect = (attachments: AttachmentLike[]) => {
     // 只进内存缓存，编辑区不插入；发布时统一追加到 raw 末尾
     pendingGallery.value = { images: images.slice(0, 9) };
     debounceOnUpdate();
+    if (reopenMediaPreview.value) {
+      reopenMediaPreview.value = false;
+      mediaPreviewShow.value = true;
+    }
     return;
   }
   attachments.forEach((attachment) => {
@@ -227,6 +233,10 @@ const selectSong = (song: EditorSong) => {
     // 瞬间音乐只进内存缓存，发布时追加到 raw 末尾
     pendingMomentSongs.value = [...pendingMomentSongs.value, song];
     debounceOnUpdate();
+    if (reopenMediaPreview.value) {
+      reopenMediaPreview.value = false;
+      mediaPreviewShow.value = true;
+    }
   } else {
     // 普通音乐：插入简短链接到光标位置，信息藏在 URL 参数里，原位渲染
     setCursor(lastSelectionRange);
@@ -238,6 +248,22 @@ const selectSong = (song: EditorSong) => {
 
 const openMediaPreview = () => {
   mediaPreviewShow.value = true;
+};
+
+// 从预览面板里点「重新选择」时，先关掉面板再开选择器，避免弹窗被面板遮住
+const editGalleryFromPreview = () => {
+  reopenMediaPreview.value = true;
+  mediaPreviewShow.value = false;
+  openAttachmentPicker("gallery");
+};
+const editMomentFromPreview = () => {
+  reopenMediaPreview.value = true;
+  mediaPreviewShow.value = false;
+  openSongPicker("moment");
+};
+
+const toggleFullscreen = () => {
+  isFullscreen.value = !isFullscreen.value;
 };
 
 const removeGalleryImage = (index: number) => {
@@ -286,6 +312,12 @@ const handleSourceShortcut = (event: KeyboardEvent) => {
   if ((event.ctrlKey || event.metaKey) && event.key === "/") {
     event.preventDefault();
     toggleSourceMode();
+    return;
+  }
+  if (event.key === "Escape" && isFullscreen.value) {
+    // 有自己的弹窗打开时优先让弹窗处理 Esc
+    if (mediaPreviewShow.value || songPickerShow.value || attachmentSelectorModalShow.value) return;
+    isFullscreen.value = false;
   }
 };
 
@@ -479,7 +511,10 @@ const update = (val: string | null) => {
 </script>
 
 <template>
-  <div id="plugin-vditor-mde" :class="{ h1AsTitle: editorConfig?.basic.firstH1AsTitle }">
+  <div
+    id="plugin-vditor-mde"
+    :class="{ h1AsTitle: editorConfig?.basic.firstH1AsTitle, 'is-fullscreen': isFullscreen }"
+  >
     <VLoading v-if="!vditorLoaded" class="hs-vditor-loading" />
     <DebugPanel v-if="debugMode" :config="editorConfig" :vditor="vditor" :cursor="lastSelectionRange" />
     <div id="vditor" ref="vditorRef"></div>
@@ -491,17 +526,17 @@ const update = (val: string | null) => {
       <button type="button" title="插入音乐播放器" @click="openSongPicker('inline')">
         <span aria-hidden="true">♪</span><span>音乐</span>
       </button>
-      <button type="button" :title="`九宫格（已选 ${pendingGallery.images.length}）`" @click="openMediaPreview">
-        <span aria-hidden="true">▦</span><span>九宫格{{ pendingGallery.images.length ? ` ${pendingGallery.images.length}` : "" }}</span>
-      </button>
-      <button type="button" :title="`瞬间音乐（已选 ${pendingMomentSongs.length}）`" @click="openMediaPreview">
-        <span aria-hidden="true">♫</span><span>瞬间音乐{{ pendingMomentSongs.length ? ` ${pendingMomentSongs.length}` : "" }}</span>
-      </button>
       <button type="button" title="将选中内容标记为加密（保存时自动加密）" @click="markSelectionSecret">
         <span aria-hidden="true">🔒</span><span>加密</span>
       </button>
+      <button type="button" title="管理九宫格图片与瞬间音乐" @click="openMediaPreview">
+        <span aria-hidden="true">▦</span><span>瞬间</span>
+      </button>
       <button type="button" title="切换源码模式（Ctrl+/）" @click="toggleSourceMode">
         <span aria-hidden="true">⌘</span><span>源码</span>
+      </button>
+      <button type="button" :title="isFullscreen ? '退出全屏（Esc）' : '全屏编辑'" @click="toggleFullscreen">
+        <span aria-hidden="true">⛶</span><span>{{ isFullscreen ? "退出" : "全屏" }}</span>
       </button>
     </div>
 
@@ -522,8 +557,8 @@ const update = (val: string | null) => {
       :gallery-images="pendingGallery.images"
       :moment-songs="pendingMomentSongs"
       @close="mediaPreviewShow = false"
-      @edit-gallery="openAttachmentPicker('gallery')"
-      @edit-moment="openSongPicker('moment')"
+      @edit-gallery="editGalleryFromPreview"
+      @edit-moment="editMomentFromPreview"
       @remove-gallery="removeGalleryImage"
       @remove-moment="removeMomentSong"
     />
@@ -543,6 +578,23 @@ const update = (val: string | null) => {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+}
+
+#plugin-vditor-mde.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  min-height: 0;
+  background: var(--halo-surface, #fff);
+}
+
+#plugin-vditor-mde.is-fullscreen .hs-editor-toolbar {
+  position: sticky;
+}
+
+#plugin-vditor-mde.is-fullscreen #vditor {
+  flex: 1 1 auto;
+  height: auto;
 }
 
 #plugin-vditor-mde .hs-vditor-loading {

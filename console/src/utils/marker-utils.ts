@@ -35,8 +35,45 @@ export function escapeHtmlAttribute(value: string | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-export function buildInlineMusicMarker(song: EditorSong): string {
-  return `::hs-player:v1:${encodeMarkerData(song)}::`;
+/**
+ * 普通音乐用 Markdown 链接表示：编辑器里只显示「♪ 歌曲名 - 歌手」，
+ * 歌曲信息全部放进 URL 查询参数（hs-* 前缀），音乐源本身作为链接地址，点击即可试听。
+ */
+export function buildMusicLink(song: EditorSong): string {
+  const url = new URL(song.url, "https://local.invalid");
+  url.searchParams.set("hs-music", "1");
+  url.searchParams.set("hs-name", song.name || "");
+  url.searchParams.set("hs-artist", song.artist || "");
+  url.searchParams.set("hs-cover", song.cover || "");
+  url.searchParams.set("hs-lrc", song.lrc || "");
+  const href =
+    song.url.startsWith("http://") || song.url.startsWith("https://")
+      ? url.toString()
+      : `${url.pathname}${url.search}`;
+  const label = song.artist ? `${song.name} - ${song.artist}` : song.name;
+  return `[♪ ${label}](${href})`;
+}
+
+/** 从带 hs-* 参数的链接中还原歌曲信息；不是音乐链接则返回 undefined */
+export function parseMusicLink(href: string): EditorSong | undefined {
+  let url: URL;
+  try {
+    url = new URL(href, "https://local.invalid");
+  } catch {
+    return undefined;
+  }
+  if (url.searchParams.get("hs-music") !== "1") return undefined;
+  const name = url.searchParams.get("hs-name") || "";
+  const artist = url.searchParams.get("hs-artist") || "";
+  const cover = url.searchParams.get("hs-cover") || "";
+  const lrc = url.searchParams.get("hs-lrc") || "";
+  for (const key of ["hs-music", "hs-name", "hs-artist", "hs-cover", "hs-lrc"]) {
+    url.searchParams.delete(key);
+  }
+  const isAbsolute = href.startsWith("http://") || href.startsWith("https://");
+  const source = isAbsolute ? url.toString() : `${url.pathname}${url.search}`;
+  if (!source) return undefined;
+  return { name, artist, cover, lrc, url: source };
 }
 
 export function buildInlineMusicHtml(song: EditorSong): string {
@@ -117,6 +154,37 @@ export function buildMomentMusicMarker(song: EditorSong): string {
   return `::hs-music:v1:${encodeMarkerData(song)}::`;
 }
 
+/**
+ * 从 raw 中抽出九宫格/瞬间音乐标记，交给编辑器内存缓存管理。
+ * 编辑区里不保留这些标记，发布时再统一追加回末尾。
+ */
+export function extractPendingFromRaw(raw: string): {
+  editorRaw: string;
+  galleryImages: string[];
+  momentSongs: EditorSong[];
+} {
+  let editorRaw = raw;
+  let galleryImages: string[] = [];
+  const momentSongs: EditorSong[] = [];
+
+  editorRaw = editorRaw.replace(/::hs-gallery:v1:([A-Za-z0-9_-]+)::/g, (_match, payload: string) => {
+    const data = decodeMarkerData<EditorGallery>(payload);
+    if (data?.images?.length) galleryImages = galleryImages.concat(data.images);
+    return "";
+  });
+  editorRaw = editorRaw.replace(/::hs-music:v1:([A-Za-z0-9_-]+)::/g, (_match, payload: string) => {
+    const song = decodeMarkerData<EditorSong>(payload);
+    if (song?.url) momentSongs.push(song);
+    return "";
+  });
+
+  return {
+    editorRaw: editorRaw.replace(/\n{3,}/g, "\n\n").trim(),
+    galleryImages: galleryImages.slice(0, 9),
+    momentSongs,
+  };
+}
+
 function replaceParagraphMarker(html: string, name: string, render: (payload: string) => string): string {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
@@ -149,7 +217,14 @@ function extractParagraphMarkers(html: string, name: string): [string, string[]]
 }
 
 export function renderCustomMarkers(html: string): string {
-  let output = replaceParagraphMarker(html, "hs-secret", (payload) => {
+  // 普通音乐链接：<a href="...?hs-music=1&...">♪ 歌曲 - 歌手</a> → 原位播放器
+  // lute 会把 href 中的 & 转义为 &amp;，先还原再解析
+  let output = html.replace(/<a\s+href="([^"]*hs-music=1[^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (match, href: string) => {
+    const song = parseMusicLink(href.replace(/&amp;/g, "&"));
+    return song?.url ? buildInlineMusicHtml(song) : match;
+  });
+
+  output = replaceParagraphMarker(output, "hs-secret", (payload) => {
     return `<div class="hs-secret" data-hs-secret="${escapeHtmlAttribute(payload)}"><button type="button" class="hs-secret-lock" aria-label="解密内容">🔒 已加密内容，点击输入密钥</button></div>`;
   });
 

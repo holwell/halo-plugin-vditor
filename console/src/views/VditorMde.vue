@@ -4,6 +4,7 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import "vditor/dist/index.css";
 
+import MediaPreviewModal from "@/components/MediaPreviewModal.vue";
 import SongPickerModal from "@/components/SongPickerModal.vue";
 import DebugPanel from "@/model/DebugPanel.vue";
 import TemplateModal from "@/model/TemplateModal.vue";
@@ -16,11 +17,13 @@ import { fetchAllCustomRenderScripts, fetchAllQuickInsert } from "@/utils/fetch-
 import { copyAsHTML } from "@/utils/html-utils";
 import {
   buildGalleryMarker,
-  buildInlineMusicMarker,
+  buildMusicLink,
   buildMomentMusicMarker,
   buildSecretEditorBlock,
   decodeSecretRawForEditor,
   encodeSecretEditorForRaw,
+  extractPendingFromRaw,
+  type EditorGallery,
   type EditorSong,
 } from "@/utils/marker-utils";
 import { quickInsertInject } from "@/utils/quick-insert-utils";
@@ -53,6 +56,10 @@ const attachmentSelectionMode = ref<"image" | "gallery">("image");
 const songPickerShow = ref(false);
 const songPickerMode = ref<"inline" | "moment">("inline");
 const songs = ref<EditorSong[]>([]);
+// 九宫格与瞬间音乐只在内存中缓存，编辑区不显示，发布时追加到 raw 末尾
+const pendingGallery = ref<EditorGallery>({ images: [] });
+const pendingMomentSongs = ref<EditorSong[]>([]);
+const mediaPreviewShow = ref(false);
 const editorConfig = ref<EditorConfig>();
 // 特殊插入框， 当前支持none/tips/git
 // 自定义插入
@@ -116,6 +123,17 @@ const debounceOnUpdate = async () => {
   }
   if (sequence !== updateSequence) return;
 
+  // 发布时把内存里的九宫格/瞬间音乐追加到末尾：音乐在前，九宫格在后
+  const pendingMarkers: string[] = [];
+  pendingMomentSongs.value.forEach((song) => pendingMarkers.push(buildMomentMusicMarker(song)));
+  if (pendingGallery.value.images.length) {
+    pendingMarkers.push(buildGalleryMarker({ images: pendingGallery.value.images.slice(0, 9) }));
+  }
+  if (pendingMarkers.length) {
+    const separator = rawValue.endsWith("\n\n") ? "" : rawValue.endsWith("\n") ? "\n" : "\n\n";
+    rawValue = `${rawValue}${separator}${pendingMarkers.join("\n\n")}`;
+  }
+
   const config = editorConfig.value || defaultEditorConfig;
   const customRenders = vditor.value?.vditor?.options?.customRenders;
   let html = "";
@@ -131,15 +149,6 @@ const debounceOnUpdate = async () => {
   emit("update:raw", rawValue);
   emit("update:content", html);
   emit("update", rawValue);
-};
-
-// 自定义标记统一追加到正文末尾：不打断写作，不参与编辑器即时渲染
-const appendMarker = (marker: string) => {
-  const current = vditor.value?.getValue() || "";
-  const separator = current.endsWith("\n\n") ? "" : current.endsWith("\n") ? "\n" : "\n\n";
-  vditor.value?.setValue(`${current}${separator}${marker}`);
-  debounceOnUpdate();
-  vditor.value?.focus();
 };
 
 // 选取附件后处理
@@ -159,7 +168,9 @@ const attachmentSelect = (attachments: AttachmentLike[]) => {
       }
     });
     if (!images.length) return;
-    appendMarker(buildGalleryMarker({ images: images.slice(0, 9) }));
+    // 只进内存缓存，编辑区不插入；发布时统一追加到 raw 末尾
+    pendingGallery.value = { images: images.slice(0, 9) };
+    debounceOnUpdate();
     return;
   }
   attachments.forEach((attachment) => {
@@ -213,30 +224,48 @@ const openSongPicker = async (mode: "inline" | "moment") => {
 
 const selectSong = (song: EditorSong) => {
   if (songPickerMode.value === "moment") {
-    appendMarker(buildMomentMusicMarker(song));
+    // 瞬间音乐只进内存缓存，发布时追加到 raw 末尾
+    pendingMomentSongs.value = [...pendingMomentSongs.value, song];
+    debounceOnUpdate();
   } else {
-    // 普通音乐插入到当前光标位置，渲染时也保持在原位
+    // 普通音乐：插入简短链接到光标位置，信息藏在 URL 参数里，原位渲染
     setCursor(lastSelectionRange);
-    vditor.value?.insertValue(`\n\n${buildInlineMusicMarker(song)}\n\n`);
+    vditor.value?.insertValue(`\n\n${buildMusicLink(song)}\n\n`);
   }
   songPickerShow.value = false;
   vditor.value?.focus();
 };
 
+const openMediaPreview = () => {
+  mediaPreviewShow.value = true;
+};
+
+const removeGalleryImage = (index: number) => {
+  pendingGallery.value = { images: pendingGallery.value.images.filter((_url, i) => i !== index) };
+  debounceOnUpdate();
+};
+
+const removeMomentSong = (index: number) => {
+  pendingMomentSongs.value = pendingMomentSongs.value.filter((_song, i) => i !== index);
+  debounceOnUpdate();
+};
+
 // 加密按钮：只把选中内容包成编辑器开闭块，实际加解密全自动
 const markSelectionSecret = () => {
-  const selected = vditor.value?.getSelection() || "";
-  if (!selected.trim()) {
-    vditor.value?.tip("请先选中要加密的文字", 3000);
-    return;
-  }
   if (!editorConfig.value?.security.encryptionKey) {
     vditor.value?.tip("请先在插件设置中填写加密密钥", 3000);
     return;
   }
-  vditor.value?.deleteValue();
-  vditor.value?.insertValue(`\n${buildSecretEditorBlock(selected)}\n`);
-  vditor.value?.tip("已标记为加密内容，保存时自动加密", 2000);
+  const selected = vditor.value?.getSelection() || "";
+  if (selected.trim()) {
+    vditor.value?.deleteValue();
+    vditor.value?.insertValue(`\n${buildSecretEditorBlock(selected)}\n`);
+    vditor.value?.tip("已标记为加密内容，保存时自动加密", 2000);
+  } else {
+    // 未选中：插入带空行的开闭块，空行处可直接输入
+    vditor.value?.insertValue(`\n${buildSecretEditorBlock("")}\n`);
+    vditor.value?.tip("已在空行处插入加密块，直接输入即可", 2000);
+  }
 };
 
 const toggleSourceMode = () => {
@@ -308,6 +337,11 @@ onMounted(async () => {
       typeWriterMode: editorConfig.value.basic.typeWriterMode,
       after: async () => {
         let content = props.raw || "";
+        // 九宫格/瞬间音乐交给内存缓存管理，编辑区里不显示这些标记
+        const pending = extractPendingFromRaw(content);
+        content = pending.editorRaw;
+        pendingGallery.value = { images: pending.galleryImages };
+        pendingMomentSongs.value = pending.momentSongs;
         // raw 里是密文，加载时用设置里的密钥自动解密成编辑器明文
         const password = editorConfig.value?.security.encryptionKey || "";
         try {
@@ -457,11 +491,11 @@ const update = (val: string | null) => {
       <button type="button" title="插入音乐播放器" @click="openSongPicker('inline')">
         <span aria-hidden="true">♪</span><span>音乐</span>
       </button>
-      <button type="button" title="插入九宫格" @click="openAttachmentPicker('gallery')">
-        <span aria-hidden="true">▦</span><span>九宫格</span>
+      <button type="button" :title="`九宫格（已选 ${pendingGallery.images.length}）`" @click="openMediaPreview">
+        <span aria-hidden="true">▦</span><span>九宫格{{ pendingGallery.images.length ? ` ${pendingGallery.images.length}` : "" }}</span>
       </button>
-      <button type="button" title="插入瞬间音乐" @click="openSongPicker('moment')">
-        <span aria-hidden="true">♫</span><span>瞬间音乐</span>
+      <button type="button" :title="`瞬间音乐（已选 ${pendingMomentSongs.length}）`" @click="openMediaPreview">
+        <span aria-hidden="true">♫</span><span>瞬间音乐{{ pendingMomentSongs.length ? ` ${pendingMomentSongs.length}` : "" }}</span>
       </button>
       <button type="button" title="将选中内容标记为加密（保存时自动加密）" @click="markSelectionSecret">
         <span aria-hidden="true">🔒</span><span>加密</span>
@@ -482,6 +516,16 @@ const update = (val: string | null) => {
       :songs="songs"
       @close="songPickerShow = false"
       @select="selectSong"
+    />
+    <MediaPreviewModal
+      :open="mediaPreviewShow"
+      :gallery-images="pendingGallery.images"
+      :moment-songs="pendingMomentSongs"
+      @close="mediaPreviewShow = false"
+      @edit-gallery="openAttachmentPicker('gallery')"
+      @edit-moment="openSongPicker('moment')"
+      @remove-gallery="removeGalleryImage"
+      @remove-moment="removeMomentSong"
     />
 
     <AttachmentSelectorModal

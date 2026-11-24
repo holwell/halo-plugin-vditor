@@ -714,6 +714,8 @@ const update = (val: string | null) => {
   /* 低于所有弹窗层级（我们的 2050/2200、Halo 的 2000/9999+），保证全屏下弹窗仍可操作 */
   z-index: 1990;
   min-height: 0;
+  /* 全屏容器自身滚动，滚动条出现在视口右侧，而不是编辑区内部 */
+  overflow-y: auto;
   background: var(--hs-vditor-bg, var(--halo-surface, #fff));
   color: var(--hs-vditor-fg, inherit);
 }
@@ -722,13 +724,15 @@ const update = (val: string | null) => {
   position: sticky;
 }
 
-/* 全屏 Token 覆盖 Vditor 自身配色，使编辑体验贴近前台主题 */
+/* 单一背景色：编辑区全部透明，只保留全屏容器的一层底色 */
 #plugin-vditor-mde.is-fullscreen .vditor,
 #plugin-vditor-mde.is-fullscreen .vditor-reset,
 #plugin-vditor-mde.is-fullscreen .vditor-wysiwyg,
 #plugin-vditor-mde.is-fullscreen .vditor-ir,
 #plugin-vditor-mde.is-fullscreen .vditor-sv {
-  background: var(--hs-vditor-bg, transparent);
+  --panel-background-color: transparent;
+  --textarea-background-color: transparent;
+  background: transparent;
   color: var(--hs-vditor-fg, inherit);
   /* 与主题一致的字体策略：苹方优先 */
   font-family: var(
@@ -742,8 +746,20 @@ const update = (val: string | null) => {
   );
 }
 
-/* 编辑区限宽居中，贴近前台阅读宽度 */
-#plugin-vditor-mde #vditor {
+/* 编辑区不自己滚动、不限制高度，内容自然撑开，由全屏容器提供滚动条 */
+#plugin-vditor-mde.is-fullscreen .vditor,
+#plugin-vditor-mde.is-fullscreen .vditor-reset,
+#plugin-vditor-mde.is-fullscreen .vditor-wysiwyg,
+#plugin-vditor-mde.is-fullscreen .vditor-wysiwyg pre.vditor-reset,
+#plugin-vditor-mde.is-fullscreen .vditor-ir pre.vditor-reset,
+#plugin-vditor-mde.is-fullscreen .vditor-sv {
+  flex: none;
+  height: auto;
+  overflow: visible;
+}
+
+/* 仅全屏下限宽居中，贴近前台阅读宽度；非全屏保持原样 */
+#plugin-vditor-mde.is-fullscreen #vditor {
   width: 100%;
   max-width: 680px;
   margin-inline: auto;
@@ -791,11 +807,6 @@ const update = (val: string | null) => {
   scrollbar-width: thin;
   scrollbar-color: var(--hs-vditor-scrollbar, var(--hs-vditor-border, rgba(0, 0, 0, 0.2)))
     transparent;
-}
-
-#plugin-vditor-mde.is-fullscreen #vditor {
-  flex: 1 1 auto;
-  height: auto;
 }
 
 #plugin-vditor-mde .hs-vditor-loading {

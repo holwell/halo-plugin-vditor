@@ -8,6 +8,7 @@ import type { Options, QuickInsert, Schema } from "@/type/editor";
 import type { EditorConfig } from "@/utils/config-utils";
 import { addScript, addStyleSheet } from "@/utils/dom-utils";
 import { t } from "@/utils/i18n-utils";
+import { renderCustomMarkers } from "@/utils/marker-utils";
 import { mdiGrid, mdiImage } from "@/utils/icon";
 import type { PluginModule } from "@halo-dev/console-shared";
 import type Vditor from "vditor";
@@ -37,20 +38,21 @@ export function getOptions(options: Options): IOptions {
     icon: "material",
     lang: getLanguage(options.language),
     toolbarConfig: {
-      pin: true,
+      hide: true,
     },
     cache: {
       enable: false,
     },
     after: options.after,
     input: options.input,
-    toolbar: toolbar,
+    toolbar: ["edit-mode"],
     counter: {
-      enable: true,
+      enable: false,
     },
     preview: {
+      mode: "editor",
       markdown: {
-        toc: true,
+        toc: false,
         codeBlockPreview: options.codeBlockPreview,
       },
       theme: {
@@ -64,7 +66,7 @@ export function getOptions(options: Options): IOptions {
       actions: options.actions,
     },
     outline: {
-      enable: true,
+      enable: false,
       position: "left",
     },
     fullscreen: {
@@ -299,6 +301,6 @@ export function renderHTML(vditor: Vditor | undefined, config?: EditorConfig): s
     value = value.replace(/<h1(?:\s+[^>]*)?>(.*?)<\/h1>/, "");
     console.log(value);
   }
-  console.log(value);
+  value = renderCustomMarkers(value);
   return value;
 }

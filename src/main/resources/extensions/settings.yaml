@@ -85,13 +85,26 @@ spec:
           placeholder: light
           value: ""
     - group: extension
-      label: 文件格式
+      label: 文件格式与数据源
       formSchema:
         - $formkit: text
           name: allowImageType
           label: 允许的图片格式
           help: 自定义允许上传的图片格式
           value: "png,jpg,jpeg,bmp,gif,webp,svg"
+        - $formkit: text
+          name: songsApi
+          label: 全部歌曲接口
+          help: 编辑器「插入音乐 / 瞬间音乐」读取的歌曲列表接口；默认使用 aplayer-backend 插件的全部歌曲接口。
+          value: "/apis/api.aplayer-backend/v1alpha1/songs"
+    - group: security
+      label: 内容加密
+      formSchema:
+        - $formkit: password
+          name: encryptionKey
+          label: 加密密钥
+          help: 用于加密选中段落的密钥。密钥只保存在插件设置中，不会下发到前台；发布前不要遗失，否则已加密内容无法解密。
+          value: ""
     - group: render
       label: 渲染
       formSchema:

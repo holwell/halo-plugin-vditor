@@ -4,15 +4,24 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 
 import "vditor/dist/index.css";
 
+import SongPickerModal from "@/components/SongPickerModal.vue";
 import DebugPanel from "@/model/DebugPanel.vue";
 import TemplateModal from "@/model/TemplateModal.vue";
 import joeProgress from "@/schema/joe-progress";
 import type { Schema } from "@/type/editor";
 import { defaultEditorConfig, type EditorConfig } from "@/utils/config-utils";
+import { encryptText } from "@/utils/crypto-utils";
 import { getCursor, setCursor } from "@/utils/cursor-utils";
 import { addStyle } from "@/utils/dom-utils";
 import { fetchAllCustomRenderScripts, fetchAllQuickInsert } from "@/utils/fetch-utils";
 import { copyAsHTML } from "@/utils/html-utils";
+import {
+  buildGalleryMarker,
+  buildInlineMusicHtml,
+  buildMomentMusicMarker,
+  buildSecretMarker,
+  type EditorSong,
+} from "@/utils/marker-utils";
 import { quickInsertInject } from "@/utils/quick-insert-utils";
 import { getOptions, renderHTML } from "@/utils/vditor-utils";
 import type { Attachment } from "@halo-dev/api-client";
@@ -39,6 +48,11 @@ const vditor = ref<Vditor>();
 const vditorRef = ref();
 const vditorLoaded = ref(false);
 const attachmentSelectorModalShow = ref(false);
+const attachmentSelectionMode = ref<"image" | "gallery">("image");
+const songPickerShow = ref(false);
+const songPickerMode = ref<"inline" | "moment">("inline");
+const songs = ref<EditorSong[]>([]);
+const encrypting = ref(false);
 const editorConfig = ref<EditorConfig>();
 // 特殊插入框， 当前支持none/tips/git
 // 自定义插入
@@ -103,6 +117,22 @@ const debounceOnUpdate = () => {
 const attachmentSelect = (attachments: AttachmentLike[]) => {
   setCursor(lastSelectionRange);
   // Reference https://github.com/guqing/willow-mde/blob/4b8e697132f8a8f4b08dd0f92cf10d070cb26793/console/src/components/toolbar/Toolbar.vue#L104
+  if (attachmentSelectionMode.value === "gallery") {
+    const images: string[] = [];
+    attachments.forEach((attachment) => {
+      if (typeof attachment === "string") {
+        images.push(attachment);
+      } else if ("url" in attachment) {
+        images.push(String(attachment.url));
+      } else if ("spec" in attachment) {
+        const { permalink } = attachment.status || {};
+        if (permalink) images.push(permalink);
+      }
+    });
+    if (!images.length) return;
+    vditor.value?.insertValue(`\n\n${buildGalleryMarker({ images: images.slice(0, 9) })}\n\n`);
+    return;
+  }
   attachments.forEach((attachment) => {
     if (typeof attachment === "string") {
       vditor.value?.insertValue(`\n\n![](${attachment})\n\n`);
@@ -116,13 +146,108 @@ const attachmentSelect = (attachments: AttachmentLike[]) => {
   });
 };
 
+const openAttachmentPicker = (mode: "image" | "gallery") => {
+  lastSelectionRange = getCursor();
+  attachmentSelectionMode.value = mode;
+  attachmentSelectorModalShow.value = true;
+};
+
+const loadSongs = async () => {
+  const api = editorConfig.value?.extension.songsApi || defaultEditorConfig.extension.songsApi;
+  try {
+    const response = await fetch(api);
+    if (!response.ok) throw new Error(String(response.status));
+    const data = await response.json();
+    const list = Array.isArray(data) ? data : (data.songs ?? []);
+    songs.value = (list as Record<string, unknown>[])
+      .map((item) => ({
+        id: String(item.id ?? ""),
+        name: String(item.name ?? ""),
+        artist: String(item.artist ?? ""),
+        url: String(item.url ?? ""),
+        cover: String(item.cover ?? ""),
+        lrc: String(item.lrc ?? ""),
+      }))
+      .filter((song) => Boolean(song.name && song.url));
+  } catch {
+    songs.value = [];
+    vditor.value?.tip("歌曲列表加载失败，请检查 aplayer-backend 插件与歌曲接口配置", 3000);
+  }
+};
+
+const openSongPicker = async (mode: "inline" | "moment") => {
+  lastSelectionRange = getCursor();
+  songPickerMode.value = mode;
+  songPickerShow.value = true;
+  await loadSongs();
+};
+
+const selectSong = (song: EditorSong) => {
+  setCursor(lastSelectionRange);
+  if (songPickerMode.value === "moment") {
+    vditor.value?.insertValue(`\n\n${buildMomentMusicMarker(song)}\n\n`);
+  } else {
+    vditor.value?.insertValue(`\n\n${buildInlineMusicHtml(song)}\n\n`);
+  }
+  songPickerShow.value = false;
+  vditor.value?.focus();
+};
+
+const encryptSelection = async () => {
+  const password = editorConfig.value?.security.encryptionKey || "";
+  if (!password) {
+    vditor.value?.tip("请先在插件设置中填写加密密钥", 3000);
+    return;
+  }
+  const selected = vditor.value?.getSelection() || "";
+  if (!selected.trim()) {
+    vditor.value?.tip("请先选中要加密的文字", 3000);
+    return;
+  }
+  encrypting.value = true;
+  try {
+    const payload = await encryptText(selected, password);
+    vditor.value?.deleteValue();
+    vditor.value?.insertValue(buildSecretMarker(JSON.parse(payload)));
+    vditor.value?.tip("已加密", 2000);
+  } catch (error) {
+    console.error(error);
+    vditor.value?.tip("加密失败，请检查浏览器是否支持 WebCrypto", 3000);
+  } finally {
+    encrypting.value = false;
+  }
+};
+
+const toggleSourceMode = () => {
+  const currentMode = vditor.value?.getCurrentMode();
+  const nextMode = currentMode === "sv" ? "ir" : "sv";
+  const button = document.querySelector<HTMLButtonElement>(
+    `#plugin-vditor-mde .vditor-toolbar button[data-mode="${nextMode}"]`,
+  );
+  if (!button) {
+    vditor.value?.tip("源码模式切换失败", 2000);
+    return;
+  }
+  setCursor(lastSelectionRange);
+  button.click();
+};
+
+const handleSourceShortcut = (event: KeyboardEvent) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "/") {
+    event.preventDefault();
+    toggleSourceMode();
+  }
+};
+
 onUnmounted(async () => {
+  window.removeEventListener("keydown", handleSourceShortcut);
   document.querySelectorAll("script[id^='vditor']").forEach((el) => el.remove());
   document.querySelectorAll("link[id^='vditor']").forEach((el) => el.remove());
   vditorLoaded.value = false;
 });
 
 onMounted(async () => {
+  window.addEventListener("keydown", handleSourceShortcut);
   // 实验性功能: 获取当前语言
   const lang = localStorage.getItem("locale") || "zh-CN";
   try {
@@ -175,8 +300,7 @@ onMounted(async () => {
       },
       input: debounceOnUpdate,
       showAttachment: () => {
-        lastSelectionRange = getCursor();
-        attachmentSelectorModalShow.value = true;
+        openAttachmentPicker("image");
       },
       language: lang,
       codeBlockPreview: editorConfig.value.basic.codeBlockPreview,
@@ -297,26 +421,112 @@ const update = (val: string | null) => {
 
 <template>
   <div id="plugin-vditor-mde" :class="{ h1AsTitle: editorConfig?.basic.firstH1AsTitle }">
-    <VLoading v-if="!vditorLoaded" style="height: 100%" />
+    <VLoading v-if="!vditorLoaded" class="hs-vditor-loading" />
     <DebugPanel v-if="debugMode" :config="editorConfig" :vditor="vditor" :cursor="lastSelectionRange" />
     <div id="vditor" ref="vditorRef"></div>
+
+    <div class="hs-editor-toolbar" aria-label="编辑器工具栏">
+      <button type="button" title="插入图片" @click="openAttachmentPicker('image')">
+        <span aria-hidden="true">🖼</span><span>图片</span>
+      </button>
+      <button type="button" title="插入音乐播放器" @click="openSongPicker('inline')">
+        <span aria-hidden="true">♪</span><span>音乐</span>
+      </button>
+      <button type="button" title="插入九宫格" @click="openAttachmentPicker('gallery')">
+        <span aria-hidden="true">▦</span><span>九宫格</span>
+      </button>
+      <button type="button" title="插入瞬间音乐" @click="openSongPicker('moment')">
+        <span aria-hidden="true">♫</span><span>瞬间音乐</span>
+      </button>
+      <button type="button" title="加密选中内容" :disabled="encrypting" @click="encryptSelection">
+        <span aria-hidden="true">🔒</span><span>{{ encrypting ? "加密中" : "加密" }}</span>
+      </button>
+      <button type="button" title="切换源码模式（Ctrl+/）" @click="toggleSourceMode">
+        <span aria-hidden="true">⌘</span><span>源码</span>
+      </button>
+    </div>
+
     <TemplateModal
       :open="customInsertOpen"
       :schema="customInsertSchema"
       @close="customInsertOpen = false"
       @done="update"
     />
+    <SongPickerModal
+      :open="songPickerShow"
+      :songs="songs"
+      @close="songPickerShow = false"
+      @select="selectSong"
+    />
 
     <AttachmentSelectorModal
       v-model:visible="attachmentSelectorModalShow"
       :accepts="['image/*']"
-      :max="20"
+      :max="attachmentSelectionMode === 'gallery' ? 9 : 20"
       @select="attachmentSelect"
     />
   </div>
 </template>
 
 <style>
+#plugin-vditor-mde {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+#plugin-vditor-mde .hs-vditor-loading {
+  min-height: 480px;
+}
+
+#plugin-vditor-mde #vditor {
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+
+#plugin-vditor-mde .vditor-toolbar,
+#plugin-vditor-mde .vditor-outline,
+#plugin-vditor-mde .vditor-counter,
+#plugin-vditor-mde .vditor-preview {
+  display: none !important;
+}
+
+.hs-editor-toolbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--halo-divider, #e5e7eb);
+  background: var(--halo-surface, #fff);
+}
+
+.hs-editor-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--halo-divider, #d1d5db);
+  border-radius: 6px;
+  background: var(--halo-surface, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+
+.hs-editor-toolbar button:hover:not(:disabled) {
+  background: var(--halo-fill, rgba(0, 0, 0, 0.05));
+}
+
+.hs-editor-toolbar button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 #plugin-vditor-mde ol {
   list-style: decimal;
 }

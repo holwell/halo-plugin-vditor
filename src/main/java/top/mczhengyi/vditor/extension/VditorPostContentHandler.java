@@ -24,17 +24,23 @@ public class VditorPostContentHandler implements ReactivePostContentHandler {
     public Mono<PostContentContext> handle(PostContentContext contentContext) {
         return reactiveSettingFetcher.fetch("render", RenderConfig.class)
                 .map(renderConfig -> {
-                    if (renderConfig.getEnableRender()&&
-                        (!renderConfig.getOnlyMarkdown() || contentContext.getRawType().equals("markdown"))) {
-                        var content = ScriptUtils.renderScript(renderConfig) + "\n" + contentContext.getContent();
-                        contentContext.setContent(ScriptUtils.setContentProperty(content, pluginContext));
+                    var content = contentContext.getContent() == null ? "" : contentContext.getContent();
+                    if (Boolean.TRUE.equals(renderConfig.getEnableRender()) &&
+                        (!Boolean.TRUE.equals(renderConfig.getOnlyMarkdown()) ||
+                            "markdown".equals(contentContext.getRawType()))) {
+                        content = ScriptUtils.renderScript(renderConfig) + "\n" + content;
                     }
+                    content = ScriptUtils.renderSecretAssets(content);
+                    contentContext.setContent(ScriptUtils.setContentProperty(content, pluginContext));
                     return contentContext;
                 })
                 .onErrorResume(e -> {
                     if (e instanceof Throwable) {
                         log.error("VditorHeadProcessor process failed", Throwables.getRootCause(e));
                     }
+                    var current = contentContext.getContent();
+                    var content = current == null ? "" : ScriptUtils.renderSecretAssets(current);
+                    contentContext.setContent(ScriptUtils.setContentProperty(content, pluginContext));
                     return Mono.just(contentContext);
                 });
     }

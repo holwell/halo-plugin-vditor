@@ -28,6 +28,19 @@ public class ScriptUtils {
         return script.getScript();
     }
 
+    /**
+     * 加密内容不需要密钥下发，只有正文中确实存在加密块时才注入解密脚本与样式。
+     */
+    public static String renderSecretAssets(String content) {
+        if (content == null || !content.contains("data-hs-secret")) {
+            return content;
+        }
+        ScriptBuilder script = new ScriptBuilder();
+        script.stylesheet("hs-secret.css", "hs-secret-css")
+            .script("hs-secret.js", "hs-secret");
+        return script.getScript() + "\n" + content;
+    }
+
     public static String setContentProperty(String script, PluginContext pluginContext) {
         final Properties properties = new Properties();
         properties.setProperty("version", pluginContext.getVersion());

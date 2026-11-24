@@ -1,252 +1,39 @@
-# halo-plugin-vditor
+# halo-plugin-vditor（分支版）
 
-<a href="https://www.halo.run/store/apps/app-uBcYw"><img src="https://img.shields.io/badge/Halo-应用市场-%230A81F5?logo=appstore&logoColor=%23fff"></a>
-![](https://img.shields.io/badge/状态-稳定-red.svg)
-![](https://img.shields.io/badge/启动时间-2023/11/23-green.svg)
-![](https://img.shields.io/badge/优先级-HIGH-blue.svg)
-![GitHub Release](https://img.shields.io/github/v/release/justice2001/halo-plugin-vditor?color=yellow&label=版本)
+基于 [justice2001/halo-plugin-vditor](https://github.com/justice2001/halo-plugin-vditor) 定制的分支，将 Vditor 编辑器集成进 Halo，并围绕「编辑与前台主题一致」做了深度改造。
 
-本插件将Vditor整合进Halo，支持所见即所得编辑模式。 Support English (*Only Editor)!
+原项目的基础能力、安装方式、完整配置与致谢，请参阅 [原项目 README](https://github.com/justice2001/halo-plugin-vditor#readme)。本文只说明本分支新增的内容。
 
-编辑器支持数学公式、脑图、图表、流程图、甘特图、时序图、五线谱、graphviz 渲染、plantumlUML图
+## 本分支新增特性
 
-如果您在使用本插件的过程中发现了BUG或新的建议，欢迎您在 [Github ISSUE](https://github.com/justice2001/halo-plugin-vditor/issues/new) 中提出
+### 极简工具栏
 
-> Vditor 是一款浏览器端的 Markdown 编辑器，支持所见即所得、即时渲染（类似 Typora）和分屏预览模式。它使用 TypeScript 实现，支持原生 JavaScript 以及 Vue、React、Angular 和 Svelte 等框架。
+底部工具栏改为一排纯图标圆形按钮，紧凑、不抢视觉：图片、音乐、加密、瞬间、源码、目录、全屏。所有操作都可从图标悬浮提示获知，源码模式另有 `Ctrl/Cmd + /` 快捷键。
 
-## ✨特性
+### 自定义内容标记
 
-- 集成强大的Markdown编辑器Vditor进Halo中
-- 提供所见即所得(wysiwyg)、即时渲染(ir)、分屏渲染(sv)三种渲染模式
-- 支持大纲、数学公式、脑图、图表、流程图、甘特图、时序图、五线谱、多媒体、语音阅读、标题锚点、代码高亮及复制、graphviz 渲染、plantumlUML图
-- 支持字符计数
-- 支持在前台注入渲染脚本(需在设置中开启)
-- 更多强大的语法功能请 [->到这<-](https://github.com/Vanessa219/vditor) 查看 (部分功能仍未支持)
-- 支持独有的自定义语法，详细语法请参考 [这里](https://github.com/justice2001/vditor-halo-render#语法参考)
+在编辑区保持清爽的前提下，插入的结构化内容不会打断写作：
 
-## 💻使用方式
+- **音乐**：以简短的 Markdown 链接插入，编辑区只显示「♪ 歌曲名 - 歌手」，点击即可试听；封面、歌手、歌词等信息藏在链接参数里，发布时原位还原成播放器。
+- **瞬间（九宫格 / 瞬间音乐）**：集中在一个面板里增删管理。选中后不写入正文，而是暂存在内存里，编辑区始终是干净的正文；发布时统一转成标记追加到正文末尾，由渲染管线展开成真实结构。
+- **加密内容**：选中正文点「加密」即可标记，编辑器打开时自动把密文解密成明文开闭块、保存时自动加密回去，编辑时看不到密文。密钥只存在插件设置里，不下发前台；访客需自行输入密钥，在浏览器本地解密，密钥不上传。加密沿用 PBKDF2-SHA256 / AES-256-GCM，随机 salt 与 IV。密钥遗失则内容无法恢复，请妥善保管。
 
-1. 下载，目前提供以下下载方式：
-    - GitHub Releases：访问 [Releases](https://github.com/justice2001/vditor-plugin/releases) 下载 Assets 中的 JAR 文件。
-    - Halo 应用市场：[https://www.halo.run/store/apps/app-uBcYw](https://www.halo.run/store/apps/app-uBcYw)
-2. 安装，插件安装和更新方式可参考：<https://docs.halo.run/user-guide/plugins>。
-3. 安装完成之后，进入文章新建页面即可在右上角编辑器切换按钮中看到 Vditor 编辑器。
+### 全屏编辑
 
-## 📚 部分配置说明
+点全屏按钮铺满视口，再点一次或按 `Esc` 退出；地址带上 `?mode=fullscreen` 参数时进入自动全屏。全屏下可套用一套自定义配色 Token，让编辑区视觉贴近站点前台主题；未配置时使用控制台默认外观。
 
-### 自定义渲染器
+### 全屏配色 Token
 
-> ⚠️ 安全声明：请不要加载来源不明的渲染器，自定义渲染器有代码执行的功能，随意加载可能会导致安全事件的发生。
+在设置里定义多套配色 Token 并指定全屏生效的那套，Token 变量会同时映射到 Vditor 的原生 CSS 变量（边框、标题下边框、IR 模式标记色、引用、代码块、滚动条等），因此各模式的配色都会一起跟随。变量名与用法见插件设置页的帮助文字。
 
-在自定义渲染器中填入要加载的 js 链接，在编辑时会自动载入这个 js。
+### TOC 目录
 
-### 自定义预览主题
+工具栏的目录按钮可展开/收起左侧大纲，默认不展开。大纲从正文标题提取，点击可跳转，方便长文写作。
 
-此配置用于编辑器在预览时的主题，由两个选项构成：自定义主题基础地址、自定义主题名称。
+## 为什么自定义这个插件
 
-- 自定义主题基础地址：该字段为基础地址，不填写使用 vditor 内置主题，你也可以填写你的主题库地址，或填写 /upload/ 直接从 halo 附件库选择。
-- 自定义主题名称：该字段为主题名称，即 css 文件的文件名，vditor 内置的主题有：ant-design、dark、light、wechat
+作为主题开发者，我们迟早会遇到一个需求：希望文章里能写出某种自定义语法，而它最终能**可预期地**变成我们想要的 HTML 结构，好让主题能对这套结构做精确的样式渲染。要做到这一点，关键在于掌握编辑器的渲染管线——也就是「Markdown 文本 → HTML」这条链路：写下的标记经过哪一步解析、生成什么样的节点、最终输出什么样的标签与类名。
 
-这两个字段会共同定位一个 css 样式地址，组合规则为：`{自定义主题基础地址}/{自定义主题名称}.css`。注意，其他编辑器的主题无法直接在 vditor 中使用，需要进行一些改造，一般来讲只需要将文章选择器修改为`.vditor-reset`即可，如typora 的主题就可以将 `#write` 修改为 `.vditor-reset`
+一旦掌握了这条管线，编辑器里就能放心使用自定义语法，因为我们知道它会稳定地转换成目标 HTML；再配合主题的样式，就能实现编辑时简洁、前台表现丰富的效果。这条链路也是本分支所有自定义标记（音乐、瞬间、加密）能够成立的基础——它们不是在编辑器里硬塞 HTML，而是走编辑器自己的解析与渲染流程。
 
-### 扩展工具栏与自定义标记
-
-编辑器底部提供一组极简工具栏，从左到右：图片、音乐、加密、瞬间、源码、目录（TOC）、全屏。
-
-- **目录（TOC）**：点击展开/收起左侧目录大纲，默认不展开。目录从正文中提取标题，点击可跳转。
-
-- **图片**：标准 Markdown `![](...)`，原位插入。
-- **音乐**（普通文章）：插入一个简短的 Markdown 链接，编辑区里只显示 `♪ 歌曲名 - 歌手`，一眼就能看清、点击还能直接试听。歌曲的封面、歌手、歌词等信息藏在链接的查询参数里，不失真也不碍眼：
-
-  ```text
-  [♪ 歌曲名 - 歌手](/apis/.../audio/xxx.mp3?hs-music=1&hs-name=...&hs-artist=...&hs-cover=...&hs-lrc=...)
-  ```
-
-  渲染时由 `renderCustomMarkers()` 解析这些 `hs-*` 参数，原位还原成 `.hs-music-player` 播放器。
-
-- **瞬间**：九宫格与瞬间音乐合并到一个面板里管理。点击「瞬间」打开预览面板，在里面添加/删除九宫格图片和瞬间音乐。选中后不插入编辑区，而是缓存在内存里；发布时再统一转成 raw 标记追加到正文末尾（音乐在前、九宫格在后），由渲染管线展开成真实结构。编辑区始终只保留正文，写作不被打断。
-
-- **全屏**：把编辑区放大到铺满视口，营造沉静的写作环境；再点一次或按 `Esc` 退出。全屏配色可通过下方「全屏模式配色」Token 定制；若编辑器地址带 `?mode=fullscreen` 参数，进入时会自动全屏（也兼容 `mode=full-screen` 和 `fullscreen=1`）。
-
-- **加密内容**：见下节。
-
-raw 里的九宫格 `::hs-gallery:v1:<base64url>::`、瞬间音乐 `::hs-music:v1:<base64url>::` 中的 base64 只是 JSON 数据的安全编码（图片地址、歌曲信息等），**不是加密**，不需要密钥。历史文章中已有的 `<div class="hs-music-player" ...>` 和 `::hs-player:v1:...::` 仍然按原位置渲染。
-
-工具栏中的「音乐 / 瞬间音乐」从设置里的「全部歌曲接口」读取歌曲列表，默认使用 `api.aplayer-backend` 插件的 `/apis/api.aplayer-backend/v1alpha1/songs`。「源码」按钮或 `Ctrl/Cmd + /` 可以在 Vditor 的编辑模式与源码模式之间切换。
-
-### 全屏模式配色 Token
-
-在「全屏模式配色」设置组中可以定义多套编辑器配色，让全屏编辑时的视觉风格贴近站点前台主题：
-
-1. 在「Token 列表」里新增一项，填写「Token 名称」和一组 CSS 变量（每行一个）。
-2. 在「全屏模式下生效 Token 名称」里填入要使用的 Token 名称（须与列表中的名称完全一致，区分大小写）。
-3. 进入全屏时，插件会把该 Token 的变量注入到编辑器容器内，退出全屏后自动移除。名称留空或在列表中找不到对应项时，使用 Halo 控制台默认配色。
-
-支持的变量及用途：
-
-| 变量 | 用途 |
-| --- | --- |
-| `--hs-vditor-bg` | 编辑区背景 |
-| `--hs-vditor-fg` | 正文文字颜色 |
-| `--hs-vditor-toolbar-bg` | 工具栏背景 |
-| `--hs-vditor-border` | 边框 / 分割线 / 标题下边框颜色 |
-| `--hs-vditor-link` | 链接颜色，同时用于 IR 模式标记（括号、链接、强调、标题标记等） |
-| `--hs-vditor-code-bg` | 代码块背景 |
-| `--hs-vditor-selection` | 选中文本 / 按钮悬停背景 |
-| `--hs-vditor-muted` | 次要文字 / 引用块（Vditor `--second-color`、`--blockquote-color`） |
-| `--hs-vditor-scrollbar` | 全屏滚动条滑块颜色，默认取 `--hs-vditor-border` |
-| `--hs-vditor-panel-shadow` | 面板阴影 |
-
-这些变量会被映射到 Vditor 的原生 CSS 变量（`--border-color`、`--heading-border-color`、`--ir-bracket-color`、`--ir-link-color`、`--ir-heading-color` 等），因此 IR / 源码模式的标记色、各级标题的 `border-bottom`、引用块、滚动条都会跟随 Token；未定义的变量保留 Vditor 默认值。
-
-示例：
-
-```css
---hs-vditor-bg: #181818;
---hs-vditor-fg: #e6e6e6;
---hs-vditor-toolbar-bg: #1f1f1f;
---hs-vditor-border: #333;
---hs-vditor-link: #7aa2f7;
---hs-vditor-code-bg: #242424;
---hs-vditor-selection: rgba(122, 162, 247, 0.25);
-```
-
-### 内容加密
-
-在「内容加密 → 加密密钥」中填写密钥后，选中正文并点击工具栏「加密」，选中内容会被包成编辑器内的开闭块：
-
-```text
-::hs-secret-begin::
-这里是加密的明文，编辑时可以直接修改
-::hs-secret-end::
-```
-
-如果没有选中文字就点「加密」，会插入一个带空行的开闭块，直接在空行处输入即可。
-
-整个加解密过程是自动的：编辑器打开时读取 raw 里的密文，用设置中的密钥自动解密成上面的明文开闭块；保存时自动把开闭块加密回 `::hs-secret:v1:<base64url>::` 写入 raw，并从密文生成前台 HTML。编辑时看不到密文字符串，只需要关心开闭符号里的明文。
-
-- 密钥只保存在插件设置中，编辑器自动读取；前台页面不会下发密钥或明文。
-- 访客点击加密块，在弹窗中手动输入密钥，浏览器本地解密并渲染，密钥不会上传或持久化。
-- 前台解密沿用同一套 WebCrypto 参数（PBKDF2-SHA256 / AES-256-GCM，随机 salt 与 IV）。
-- 密钥一旦遗失，已经加密的内容将无法解密，请务必妥善保存。
-- 若正文中存在加密块，插件会按需注入 `hs-secret.js` / `hs-secret.css`；即使关闭内置渲染器，解密功能仍然可用。
-
-## 🤖兼容性
-
-下面是当前已知的兼容性问题
-
-- 在同时使用ToolBench插件时，数学公式、脑图、图表、流程图、甘特图、时序图、五线谱无法正常渲染。`由于此插件修改了页面结构，所以不会修复`
-- Vditor渲染器不会根据主题暗色模式进行改变，当前仅支持跟随系统暗色模式
-
-## 📒TODO
-
-> 如果可以支持的功能将会加入到这个TODO列表中，列表中没有的功能也未必是不能支持的，可能只是开发者没有想到
-
-> 插件的进度在 [Gitea](https://git.mczhengyi.top/zhengyi/halo-plugin-vditor/issues) 进行管理，当前Gitea不支持您评论，如果您想讨论Issue可以直接在Github上打开一个Issue并表明要讨论的Gitea Issue，您的回复将会被同步到Gitea。
-
-- [x] 能够在Halo中运行Vditor编辑器
-- [x] 支持数学公式、脑图、图表、流程图、甘特图、时序图、五线谱、graphviz 渲染、plantumlUML图
-- [x] 添加编辑器默认展示模式设置
-- [x] 优化代码命名
-- [x] 添加打字机模式
-- [x] 支持附件选取插入
-- [x] 支持暗色主题渲染
-- [x] 支持多媒体渲染
-- [x] 拆分配置为编辑器配置与渲染配置两部分
-- [x] 添加多国语言支持 `手搓翻译函数实现`
-- [x] 跟随主题的暗色模式(joe主题)
-- [x] 将Vditor前台渲染资源全量引入本地
-- [ ] 支持代码高亮及复制
-- [ ] 自定义暗色模式触发方式
-- [ ] 支持AI编写与修改
-- [ ] ~~内置渲染器与ToolBench不兼容~~
-
-## 🙏 鸣谢
-
-> 特别感谢来自 [Halo](https://github.com/halo-dev) 的投喂
-
-> 特别感谢[Vditor](https://github.com/Vanessa219/vditor),本插件大部分内容均为此编辑器提供
-
-* [Vditor](https://github.com/Vanessa219/vditor) 一款浏览器端的 Markdown 编辑器，支持所见即所得、即时渲染（类似 Typora）和分屏预览模式。
-* [Lute](https://github.com/88250/lute)：🎼 一款结构化的 Markdown 引擎，支持 Go 和 JavaScript
-* [highlight.js](https://github.com/highlightjs/highlight.js)：JavaScript syntax highlighter
-* [mermaid](https://github.com/knsv/mermaid)：Generation of diagram and flowchart from text in a similar manner as Markdown
-* [incubator-echarts](https://github.com/apache/incubator-echarts)：A powerful, interactive charting and visualization library for browser
-* [abcjs](https://github.com/paulrosen/abcjs)：JavaScript library for rendering standard music notation in a browser
-* [juice](https://github.com/Automattic/juice): Given HTML, juice will inline your CSS properties into the style attribute. 用于复制到微信公众号功能
-
-## 🏗开发日志
-
-- [Halo插件开发-Vditor Markdown（一）准备工作](https://blog.mczhengyi.top/archives/halo-plugin-dev-vditor-markdown-prepare)
-- [Halo插件开发-Vditor Markdown（二）编辑器](https://blog.mczhengyi.top/archives/halo-plugin-dev-vditor-markdown-editor)
-- [Halo插件开发-Vditor Markdown（三）插件设置](https://blog.mczhengyi.top/archives/halo-plugin-dev-vditor-3-settings)
-- Halo插件开发-Vditor Markdown（四）前台渲染注入 `努力赶稿中...`
-- Halo插件开发-Vditor Markdown（五）使用Halo附件管理器插入图片 `努力开发中...`
-
-## 🧑‍💻开发环境
-
-插件开发的详细文档请查阅：<https://docs.halo.run/developer-guide/plugin/hello-world>
-
-```bash
-git clone git@github.com:justice2001/vditor-mde.git
-
-# 或者当你 fork 之后
-
-git clone git@github.com:{your_github_id}/vditor-mde.git
-```
-
-```bash
-cd path/to/plugin-starter
-```
-
-```bash
-# 下载依赖包
-
-# macOS/Linux执行:
-chmod a+x download_dist.sh
-./download_dist.sh
-
-# Windows
-# 要求安装7Zip并将7Zip的文件夹加入Path环境变量
-./download_dist.bat
-```
-
-
-
-```bash
-# macOS / Linux
-./gradlew pnpmInstall
-
-# Windows
-./gradlew.bat pnpmInstall
-```
-
-```bash
-# macOS / Linux
-./gradlew build
-
-# Windows
-./gradlew.bat build
-```
-
-修改 Halo 配置文件：
-
-```yaml
-halo:
-  plugin:
-    runtime-mode: development
-    fixedPluginPath:
-      - "/path/to/plugin-starter"
-```
-
-## 🧑‍💼发布
-
-您可以在 [Gitea ISSUE](https://git.mczhengyi.top/zhengyi/halo-plugin-vditor/issues) 看到该项目的进展
-
-项目发布在 [Github](https://github.com/justice2001/halo-plugin-vditor) 和 [Gitee](https://gitee.com/zhengyi59/halo-plugin-vditor)
-
-## 📄参考文档
-
-- [Halo官方文档](https://docs.halo.run)
-- [willow-mde](https://github.com/guqing/willow-mde)
-- [plugin-highlightjs](https://github.com/halo-sigs/plugin-highlightjs)
+这正是我们要基于原项目做这套自定义的原因：编辑器不该只是一个把 Markdown 变成 HTML 的黑盒，主题开发者需要接管并理解这条管线，才能让写作体验与前台呈现真正统一。

@@ -33,6 +33,41 @@ import { VLoading } from "@halo-dev/components";
 import type { AttachmentLike } from "@halo-dev/console-shared";
 import juice from "juice";
 
+// 工具栏图标（用户提供的 SVG，统一使用 currentColor，跟随主题前景色）
+const TOOLBAR_ICONS = {
+  image: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 56 56">
+<path d="M0 0h56v56H0z" fill="none" />
+<path fill="currentColor" d="M7.715 49.574h40.57c4.899 0 7.36-2.437 7.36-7.265V13.69c0-4.828-2.461-7.265-7.36-7.265H7.715C2.84 6.426.355 8.84.355 13.69v28.62c0 4.851 2.485 7.265 7.36 7.265m31.57-21.633c-1.055-.937-2.25-1.43-3.515-1.43c-1.313 0-2.462.446-3.54 1.407l-10.593 9.469l-4.336-3.938c-.985-.867-2.04-1.336-3.164-1.336c-1.032 0-2.04.446-3 1.313L4.129 39.73V13.88c0-2.438 1.312-3.68 3.656-3.68h40.43c2.32 0 3.656 1.242 3.656 3.68v25.875Zm-21.469.258c3.024 0 5.508-2.484 5.508-5.531c0-3.023-2.484-5.531-5.508-5.531c-3.046 0-5.53 2.508-5.53 5.531a5.54 5.54 0 0 0 5.53 5.531" />
+</svg>`,
+  music: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+<path d="M0 0h24v24H0z" fill="none" />
+<g fill="none" stroke="currentColor" stroke-width="2">
+<path stroke-linecap="round" stroke-linejoin="round" d="M8 18V5.716a2 2 0 0 1 1.696-1.977l9-1.385A2 2 0 0 1 21 4.331V16" />
+<path d="m8 9l13-2" />
+<path stroke-linecap="round" stroke-linejoin="round" d="M8 18a3 3 0 1 1-6 0c0-1.657 1.343-2 3-2s3 .343 3 2m13-2a3 3 0 1 1-6 0c0-1.657 1.343-2 3-2s3 .343 3 2" />
+</g>
+</svg>`,
+  secret: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+<path d="M0 0h24v24H0z" fill="none" />
+<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+<rect width="18" height="12" x="3" y="10" rx="2" />
+<path d="M6 6a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v4H6z" />
+</g>
+</svg>`,
+  moment: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+<path d="M0 0h24v24H0z" fill="none" />
+<path fill="currentColor" d="M18.809 19.325a10 10 0 0 1-3.791 2.212a10.1 10.1 0 0 1-3.798.434C4.821 21.477.532 15.093 2.463 8.982a10.03 10.03 0 0 1 6.519-6.519a10.1 10.1 0 0 1 3.798-.434c6.399.494 10.688 6.879 8.757 12.989a10.04 10.04 0 0 1-2.728 4.307M10 19.743c2.082.572 4.13.189 6.001-.816L10 15.462Zm-5.703-5.6c.567 2.065 1.89 3.679 3.703 4.784v-6.923Zm9.701 1.318l3.706 2.14a7.93 7.93 0 0 0 2.2-4.362c.083-.535.075-.7.095-1.243ZM10 10.85v2.303l1.998 1.153L14 13.15v-2.303l-1.998-1.153Zm-5.999 1.154l6.001-3.465l-3.706-2.14a7.93 7.93 0 0 0-2.2 4.362c-.083.535-.075.7-.095 1.243M16 11.996l3.703-2.139c-.567-2.064-1.89-3.679-3.703-4.785ZM7.999 5.073L14 8.538V4.257c-2.082-.572-4.13-.189-6.001.816" />
+</svg>`,
+  source: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16">
+<path d="M0 0h16v16H0z" fill="none" />
+<path fill="currentColor" d="M13.5 1h-9A2.503 2.503 0 0 0 2 3.5v2.776a4.4 4.4 0 0 1 1-.226V3.499c0-.827.673-1.5 1.5-1.5h4v11.386l1.057 1.057c.157.149.274.344.35.557H13.5c1.378 0 2.5-1.122 2.5-2.5V3.5C16 2.122 14.878 1 13.5 1M15 12.5c0 .827-.673 1.5-1.5 1.5h-4V2h4c.827 0 1.5.673 1.5 1.5zm-8.71.09c.45-.58.71-1.31.71-2.09C7 8.57 5.43 7 3.5 7S0 8.57 0 10.5S1.57 14 3.5 14c.78 0 1.51-.26 2.09-.71l2.56 2.56c.09.1.22.15.35.15s.26-.05.35-.15c.2-.19.2-.51 0-.7zM5.5 12a2.5 2.5 0 0 1-2 1a2.5 2.5 0 0 1 0-5a2.5 2.5 0 0 1 2 4" />
+</svg>`,
+  fullscreen: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+<path d="M0 0h24v24H0z" fill="none" />
+<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 7V2h5m15 5V2h-5M7 22H2v-5m15 5h5v-5" />
+</svg>`,
+};
+
 const props = withDefaults(
   defineProps<{
     title?: string;
@@ -170,8 +205,11 @@ const attachmentSelect = (attachments: AttachmentLike[]) => {
       }
     });
     if (!images.length) return;
-    // 只进内存缓存，编辑区不插入；发布时统一追加到 raw 末尾
-    pendingGallery.value = { images: images.slice(0, 9) };
+    // 追加而非覆盖：保留已有图片，合并去重，最多 9 张
+    const merged = [...pendingGallery.value.images, ...images].filter(
+      (url, index, arr) => arr.indexOf(url) === index,
+    ).slice(0, 9);
+    pendingGallery.value = { images: merged };
     debounceOnUpdate();
     if (reopenMediaPreview.value) {
       reopenMediaPreview.value = false;
@@ -250,7 +288,7 @@ const openMediaPreview = () => {
   mediaPreviewShow.value = true;
 };
 
-// 从预览面板里点「重新选择」时，先关掉面板再开选择器，避免弹窗被面板遮住
+// 从预览面板里点「添加」时，先关掉面板再开选择器，避免弹窗被面板遮住
 const editGalleryFromPreview = () => {
   reopenMediaPreview.value = true;
   mediaPreviewShow.value = false;
@@ -521,22 +559,22 @@ const update = (val: string | null) => {
 
     <div class="hs-editor-toolbar" aria-label="编辑器工具栏">
       <button type="button" title="插入图片" @click="openAttachmentPicker('image')">
-        <span aria-hidden="true">🖼</span><span>图片</span>
+        <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.image"></span>
       </button>
       <button type="button" title="插入音乐播放器" @click="openSongPicker('inline')">
-        <span aria-hidden="true">♪</span><span>音乐</span>
+        <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.music"></span>
       </button>
       <button type="button" title="将选中内容标记为加密（保存时自动加密）" @click="markSelectionSecret">
-        <span aria-hidden="true">🔒</span><span>加密</span>
+        <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.secret"></span>
       </button>
       <button type="button" title="管理九宫格图片与瞬间音乐" @click="openMediaPreview">
-        <span aria-hidden="true">▦</span><span>瞬间</span>
+        <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.moment"></span>
       </button>
       <button type="button" title="切换源码模式（Ctrl+/）" @click="toggleSourceMode">
-        <span aria-hidden="true">⌘</span><span>源码</span>
+        <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.source"></span>
       </button>
       <button type="button" :title="isFullscreen ? '退出全屏（Esc）' : '全屏编辑'" @click="toggleFullscreen">
-        <span aria-hidden="true">⛶</span><span>{{ isFullscreen ? "退出" : "全屏" }}</span>
+        <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.fullscreen"></span>
       </button>
     </div>
 
@@ -583,7 +621,8 @@ const update = (val: string | null) => {
 #plugin-vditor-mde.is-fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 3000;
+  /* 低于所有弹窗层级（我们的 2050/2200、Halo 的 2000/9999+），保证全屏下弹窗仍可操作 */
+  z-index: 1990;
   min-height: 0;
   background: var(--halo-surface, #fff);
 }
@@ -630,13 +669,33 @@ const update = (val: string | null) => {
 .hs-editor-toolbar button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  padding: 0;
   border: 1px solid var(--halo-divider, #d1d5db);
-  border-radius: 6px;
+  border-radius: 50%;
   background: var(--halo-surface, #fff);
   color: inherit;
+  font-size: 18px;
+  line-height: 1;
   cursor: pointer;
+}
+
+.hs-editor-toolbar .hs-toolbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  line-height: 0;
+}
+
+.hs-editor-toolbar .hs-toolbar-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .hs-editor-toolbar button:hover:not(:disabled) {

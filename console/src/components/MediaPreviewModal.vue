@@ -29,7 +29,7 @@ const emit = defineEmits<{
         <div class="hs-media-section">
           <div class="hs-media-section-head">
             <span>九宫格（{{ galleryImages.length }}）</span>
-            <button type="button" class="hs-media-edit" @click="emit('editGallery')">重新选择</button>
+            <button type="button" class="hs-media-edit" @click="emit('editGallery')">添加</button>
           </div>
           <div v-if="galleryImages.length" class="hs-media-grid">
             <div v-for="(url, index) in galleryImages" :key="`${url}-${index}`" class="hs-media-thumb">
@@ -43,7 +43,7 @@ const emit = defineEmits<{
         <div class="hs-media-section">
           <div class="hs-media-section-head">
             <span>瞬间音乐（{{ momentSongs.length }}）</span>
-            <button type="button" class="hs-media-edit" @click="emit('editMoment')">重新选择</button>
+            <button type="button" class="hs-media-edit" @click="emit('editMoment')">添加</button>
           </div>
           <ul v-if="momentSongs.length" class="hs-media-songs">
             <li v-for="(song, index) in momentSongs" :key="`${song.url}-${index}`">

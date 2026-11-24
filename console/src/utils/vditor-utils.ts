@@ -11,7 +11,7 @@ import { t } from "@/utils/i18n-utils";
 import { renderCustomMarkers } from "@/utils/marker-utils";
 import { mdiGrid, mdiImage } from "@/utils/icon";
 import type { PluginModule } from "@halo-dev/console-shared";
-import type Vditor from "vditor";
+import Vditor from "vditor";
 
 declare const HaloJs: {
   renderHalo: (content: string, cdn: string) => string;
@@ -279,10 +279,16 @@ function getCustomRenders(options: Options):
  * @param config Editor Config, 可选
  * @returns html
  */
-export function renderHTML(vditor: Vditor | undefined, config?: EditorConfig): string {
-  if (!vditor) return "";
-  let value = vditor.getHTML();
-  const customRenders = vditor.vditor.options.customRenders;
+export async function renderHTMLFromRaw(
+  raw: string,
+  config?: EditorConfig,
+  customRenders?: { language: string }[],
+): Promise<string> {
+  let value = await Vditor.md2html(raw);
+  return postProcessHTML(value, config, customRenders);
+}
+
+function postProcessHTML(value: string, config?: EditorConfig, customRenders?: { language: string }[]): string {
   customRenders?.forEach((render) => {
     const reg = new RegExp(`<pre><code class="language-${render.language}">(.*?)</code></pre>`, "gs");
     value = value.replace(

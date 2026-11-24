@@ -1,4 +1,4 @@
-import { fromBase64Url, toBase64Url } from "@/utils/crypto-utils";
+import { decryptText, encryptText, fromBase64Url, toBase64Url } from "@/utils/crypto-utils";
 
 export type EditorSong = {
   id?: string;
@@ -51,8 +51,62 @@ export function buildInlineMusicHtml(song: EditorSong): string {
   ].join("");
 }
 
+/** 编辑器内的加密块表示：只显示开闭符号与明文，不显示密文 */
+export const SECRET_EDITOR_START = "::hs-secret-begin::";
+export const SECRET_EDITOR_END = "::hs-secret-end::";
+
+export function buildSecretEditorBlock(plain: string): string {
+  return `${SECRET_EDITOR_START}\n${plain}\n${SECRET_EDITOR_END}`;
+}
+
 export function buildSecretMarker(payload: SecretMarkerPayload): string {
   return `::hs-secret:v1:${encodeMarkerData(payload)}::`;
+}
+
+/**
+ * raw（密文）→ 编辑器（明文 + 开闭符号）。解密失败时保留原密文，避免丢数据。
+ */
+export async function decodeSecretRawForEditor(raw: string, password: string): Promise<string> {
+  if (!password) return raw;
+  const tokens = raw.match(/::hs-secret:v1:[A-Za-z0-9_-]+::/g) || [];
+  if (!tokens.length) return raw;
+  let output = raw;
+  for (const token of tokens) {
+    const payloadText = token.slice("::hs-secret:v1:".length, -2);
+    const payload = decodeMarkerData<SecretMarkerPayload>(payloadText);
+    if (!payload) continue;
+    try {
+      const plain = await decryptText(JSON.stringify(payload), password);
+      output = output.replace(token, buildSecretEditorBlock(plain));
+    } catch (error) {
+      console.warn("[hs-secret] 自动解密失败，保留原密文", error);
+    }
+  }
+  return output;
+}
+
+/**
+ * 编辑器（明文 + 开闭符号）→ raw（密文）。加密失败时保留编辑器原文。
+ */
+export async function encodeSecretEditorForRaw(editorValue: string, password: string): Promise<string> {
+  if (!password) return editorValue;
+  const pattern = new RegExp(
+    `${SECRET_EDITOR_START}\\s*([\\s\\S]*?)\\s*${SECRET_EDITOR_END}`,
+    "g",
+  );
+  const blocks = [...editorValue.matchAll(pattern)];
+  if (!blocks.length) return editorValue;
+  let output = editorValue;
+  for (const block of blocks) {
+    try {
+      const encrypted = await encryptText(block[1] ?? "", password);
+      const payload = JSON.parse(encrypted) as SecretMarkerPayload;
+      output = output.replace(block[0], buildSecretMarker(payload));
+    } catch (error) {
+      console.warn("[hs-secret] 自动加密失败，保留原明文", error);
+    }
+  }
+  return output;
 }
 
 export function buildGalleryMarker(gallery: EditorGallery): string {
@@ -99,11 +153,15 @@ export function renderCustomMarkers(html: string): string {
     return `<div class="hs-secret" data-hs-secret="${escapeHtmlAttribute(payload)}"><button type="button" class="hs-secret-lock" aria-label="解密内容">🔒 已加密内容，点击输入密钥</button></div>`;
   });
 
+  // 普通音乐原位渲染：插在哪就出现在哪
+  output = replaceParagraphMarker(output, "hs-player", (payload) => {
+    const song = decodeMarkerData<EditorSong>(payload);
+    return song?.url ? buildInlineMusicHtml(song) : "";
+  });
+
+  // 瞬间音乐与九宫格仍统一放到正文末尾，音乐在九宫格之前
   let musicPayloads: string[] = [];
-  [output, musicPayloads] = extractParagraphMarkers(output, "hs-player");
-  let momentMusicPayloads: string[] = [];
-  [output, momentMusicPayloads] = extractParagraphMarkers(output, "hs-music");
-  musicPayloads = musicPayloads.concat(momentMusicPayloads);
+  [output, musicPayloads] = extractParagraphMarkers(output, "hs-music");
 
   let galleryPayloads: string[] = [];
   [output, galleryPayloads] = extractParagraphMarkers(output, "hs-gallery");

@@ -18,7 +18,6 @@
 
 <script setup lang="ts">
 import type { EditorConfig } from "@/utils/config-utils";
-import { renderHTML } from "@/utils/vditor-utils";
 import { VButton } from "@halo-dev/components";
 import type Vditor from "vditor";
 import { defineProps, ref } from "vue";
@@ -38,7 +37,7 @@ const getRaw = () => {
 
 const getHTML = () => {
   if (!props.vditor) return;
-  console.log("HTML", renderHTML(props.vditor));
+  console.log("HTML", props.vditor.getHTML());
 };
 
 const getRenderList = () => {

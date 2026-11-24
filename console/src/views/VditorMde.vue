@@ -120,7 +120,8 @@ const debounceOnUpdate = async () => {
   const customRenders = vditor.value?.vditor?.options?.customRenders;
   let html = "";
   try {
-    const rendered = await Vditor.md2html(rawValue);
+    // 直接复用实例的 lute 引擎同步渲染，避免 Vditor.md2html 需要额外 options/动态加载脚本
+    const rendered = vditor.value?.vditor?.lute?.Md2HTML(rawValue) || "";
     html = renderHTMLFromMarkdownHtml(rendered, config, customRenders);
   } catch (error) {
     console.error("[Vditor] 渲染 HTML 失败", error);

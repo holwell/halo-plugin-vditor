@@ -20,6 +20,10 @@ export declare type EditorConfig = {
   security: {
     encryptionKey: string;
   };
+  fullscreen: {
+    tokens: { name: string; css: string }[];
+    activeToken: string;
+  };
   developer: {
     debugger: boolean;
   };
@@ -46,6 +50,10 @@ export const defaultEditorConfig: EditorConfig = {
   },
   security: {
     encryptionKey: "",
+  },
+  fullscreen: {
+    tokens: [],
+    activeToken: "",
   },
   developer: {
     debugger: false,

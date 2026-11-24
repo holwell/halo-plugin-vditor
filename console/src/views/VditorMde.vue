@@ -300,8 +300,55 @@ const editMomentFromPreview = () => {
   openSongPicker("moment");
 };
 
+const FULLSCREEN_STYLE_ID = "plugin-vditor-fullscreen-token";
+
+// 全屏 Token：按插件设置里的名称取对应配色变量，只在全屏容器内生效
+const removeFullscreenToken = () => {
+  document.getElementById(FULLSCREEN_STYLE_ID)?.remove();
+};
+
+const applyFullscreenToken = () => {
+  removeFullscreenToken();
+  if (!isFullscreen.value) return;
+  const config = editorConfig.value?.fullscreen;
+  const name = config?.activeToken?.trim();
+  if (!name) return;
+  const token = (config?.tokens || []).find((item) => item?.name?.trim() === name);
+  const css = token?.css?.trim();
+  if (!css) return;
+  const style = document.createElement("style");
+  style.id = FULLSCREEN_STYLE_ID;
+  style.textContent = `#plugin-vditor-mde.is-fullscreen {\n${css}\n}`;
+  document.head.appendChild(style);
+};
+
+const setFullscreen = (value: boolean) => {
+  isFullscreen.value = value;
+  if (value) {
+    applyFullscreenToken();
+  } else {
+    removeFullscreenToken();
+  }
+};
+
 const toggleFullscreen = () => {
-  isFullscreen.value = !isFullscreen.value;
+  setFullscreen(!isFullscreen.value);
+};
+
+// 支持 ?mode=fullscreen 自动进入全屏（兼容 full-screen / fullscreen=1，以及 hash 路由参数）
+const detectAutoFullscreen = () => {
+  const search = window.location.search.includes("?")
+    ? window.location.search
+    : window.location.hash.includes("?")
+      ? `?${window.location.hash.split("?")[1]}`
+      : "";
+  const params = new URLSearchParams(search);
+  const mode = (params.get("mode") || "").toLowerCase();
+  return (
+    mode === "fullscreen" ||
+    mode === "full-screen" ||
+    (params.get("fullscreen") || "").toLowerCase() === "1"
+  );
 };
 
 const removeGalleryImage = (index: number) => {
@@ -355,12 +402,13 @@ const handleSourceShortcut = (event: KeyboardEvent) => {
   if (event.key === "Escape" && isFullscreen.value) {
     // 有自己的弹窗打开时优先让弹窗处理 Esc
     if (mediaPreviewShow.value || songPickerShow.value || attachmentSelectorModalShow.value) return;
-    isFullscreen.value = false;
+    setFullscreen(false);
   }
 };
 
 onUnmounted(async () => {
   window.removeEventListener("keydown", handleSourceShortcut);
+  removeFullscreenToken();
   document.querySelectorAll("script[id^='vditor']").forEach((el) => el.remove());
   document.querySelectorAll("link[id^='vditor']").forEach((el) => el.remove());
   vditorLoaded.value = false;
@@ -368,6 +416,8 @@ onUnmounted(async () => {
 
 onMounted(async () => {
   window.addEventListener("keydown", handleSourceShortcut);
+  // URL 带 mode=fullscreen 时自动进入全屏（配置异步加载后由下方逻辑补上 Token）
+  if (detectAutoFullscreen()) setFullscreen(true);
   // 实验性功能: 获取当前语言
   const lang = localStorage.getItem("locale") || "zh-CN";
   try {
@@ -378,6 +428,8 @@ onMounted(async () => {
     editorConfig.value = defaultEditorConfig;
   }
   if (!editorConfig.value) return;
+  // 配置异步返回后，若已处于全屏则应用对应 Token
+  if (isFullscreen.value) applyFullscreenToken();
   // Assign allowImage
   allowImageUpload = allowImageUpload.concat(
     editorConfig.value.extension.allowImageType.split(",").map((i) => i.trim()),
@@ -624,11 +676,31 @@ const update = (val: string | null) => {
   /* 低于所有弹窗层级（我们的 2050/2200、Halo 的 2000/9999+），保证全屏下弹窗仍可操作 */
   z-index: 1990;
   min-height: 0;
-  background: var(--halo-surface, #fff);
+  background: var(--hs-vditor-bg, var(--halo-surface, #fff));
+  color: var(--hs-vditor-fg, inherit);
 }
 
 #plugin-vditor-mde.is-fullscreen .hs-editor-toolbar {
   position: sticky;
+}
+
+/* 全屏 Token 覆盖 Vditor 自身配色，使编辑体验贴近前台主题 */
+#plugin-vditor-mde.is-fullscreen .vditor,
+#plugin-vditor-mde.is-fullscreen .vditor-reset,
+#plugin-vditor-mde.is-fullscreen .vditor-wysiwyg,
+#plugin-vditor-mde.is-fullscreen .vditor-ir,
+#plugin-vditor-mde.is-fullscreen .vditor-sv {
+  background: var(--hs-vditor-bg, transparent);
+  color: var(--hs-vditor-fg, inherit);
+}
+
+#plugin-vditor-mde.is-fullscreen .vditor code,
+#plugin-vditor-mde.is-fullscreen .vditor pre {
+  background: var(--hs-vditor-code-bg, rgba(0, 0, 0, 0.05)) !important;
+}
+
+#plugin-vditor-mde.is-fullscreen .vditor ::selection {
+  background: var(--hs-vditor-selection, rgba(0, 0, 0, 0.15));
 }
 
 #plugin-vditor-mde.is-fullscreen #vditor {
@@ -662,8 +734,9 @@ const update = (val: string | null) => {
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px;
-  border-top: 1px solid var(--halo-divider, #e5e7eb);
-  background: var(--halo-surface, #fff);
+  border-top: 1px solid var(--hs-vditor-border, var(--halo-divider, #e5e7eb));
+  background: var(--hs-vditor-toolbar-bg, var(--halo-surface, #fff));
+  color: var(--hs-vditor-fg, inherit);
 }
 
 .hs-editor-toolbar button {
@@ -674,10 +747,10 @@ const update = (val: string | null) => {
   width: 34px;
   height: 34px;
   padding: 0;
-  border: 1px solid var(--halo-divider, #d1d5db);
+  border: 1px solid var(--hs-vditor-border, var(--halo-divider, #d1d5db));
   border-radius: 50%;
-  background: var(--halo-surface, #fff);
-  color: inherit;
+  background: var(--hs-vditor-toolbar-bg, var(--halo-surface, #fff));
+  color: var(--hs-vditor-fg, inherit);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -699,7 +772,7 @@ const update = (val: string | null) => {
 }
 
 .hs-editor-toolbar button:hover:not(:disabled) {
-  background: var(--halo-fill, rgba(0, 0, 0, 0.05));
+  background: var(--hs-vditor-selection, var(--halo-fill, rgba(0, 0, 0, 0.05)));
 }
 
 .hs-editor-toolbar button:disabled {
@@ -714,7 +787,7 @@ const update = (val: string | null) => {
 /** Fix Link color in wysiwyg mode */
 
 #plugin-vditor-mde a {
-  color: #3478cd;
+  color: var(--hs-vditor-link, #3478cd);
 }
 
 /** Fix content was covered by vditor panel in wysiwyg mode  */

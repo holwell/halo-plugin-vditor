@@ -158,6 +158,29 @@ spec:
           label: CDN URL
           placeholder: "在此处填入您的自建cdn(不支持 cdnjs 格式，使用${v}代替版本号)"
           value: ""
+    - group: fullscreen
+      label: 全屏模式配色
+      formSchema:
+        - $formkit: repeater
+          name: tokens
+          label: Token 列表
+          help: 每个 Token 是一套配色变量，全屏时按下方「生效 Token 名称」匹配。支持的变量：--hs-vditor-bg（编辑区背景）、--hs-vditor-fg（正文文字）、--hs-vditor-toolbar-bg（工具栏背景）、--hs-vditor-border（边框/分割线）、--hs-vditor-link（链接）、--hs-vditor-code-bg（代码块背景）、--hs-vditor-selection（选中背景）。每行写一个 CSS 变量，例如 --hs-vditor-bg: #181818;
+          value: []
+          children:
+            - $formkit: text
+              name: name
+              label: Token 名称
+              value: ""
+            - $formkit: textarea
+              name: css
+              label: CSS 变量
+              placeholder: "--hs-vditor-bg: #181818;\n--hs-vditor-fg: #e6e6e6;"
+              value: ""
+        - $formkit: text
+          name: activeToken
+          label: 全屏模式下生效 Token 名称
+          help: 填写上方 Token 列表中某一项的「Token 名称」；留空则全屏时不覆盖配色。
+          value: ""
     - group: developer
       label: 开发者设置
       formSchema:

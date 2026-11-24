@@ -64,13 +64,45 @@
 
 - **瞬间**：九宫格与瞬间音乐合并到一个面板里管理。点击「瞬间」打开预览面板，在里面添加/删除九宫格图片和瞬间音乐。选中后不插入编辑区，而是缓存在内存里；发布时再统一转成 raw 标记追加到正文末尾（音乐在前、九宫格在后），由渲染管线展开成真实结构。编辑区始终只保留正文，写作不被打断。
 
-- **全屏**：把编辑区放大到铺满视口，营造沉静的写作环境；再点一次或按 `Esc` 退出。
+- **全屏**：把编辑区放大到铺满视口，营造沉静的写作环境；再点一次或按 `Esc` 退出。全屏配色可通过下方「全屏模式配色」Token 定制；若编辑器地址带 `?mode=fullscreen` 参数，进入时会自动全屏（也兼容 `mode=full-screen` 和 `fullscreen=1`）。
 
 - **加密内容**：见下节。
 
 raw 里的九宫格 `::hs-gallery:v1:<base64url>::`、瞬间音乐 `::hs-music:v1:<base64url>::` 中的 base64 只是 JSON 数据的安全编码（图片地址、歌曲信息等），**不是加密**，不需要密钥。历史文章中已有的 `<div class="hs-music-player" ...>` 和 `::hs-player:v1:...::` 仍然按原位置渲染。
 
 工具栏中的「音乐 / 瞬间音乐」从设置里的「全部歌曲接口」读取歌曲列表，默认使用 `api.aplayer-backend` 插件的 `/apis/api.aplayer-backend/v1alpha1/songs`。「源码」按钮或 `Ctrl/Cmd + /` 可以在 Vditor 的编辑模式与源码模式之间切换。
+
+### 全屏模式配色 Token
+
+在「全屏模式配色」设置组中可以定义多套编辑器配色，让全屏编辑时的视觉风格贴近站点前台主题：
+
+1. 在「Token 列表」里新增一项，填写「Token 名称」和一组 CSS 变量（每行一个）。
+2. 在「全屏模式下生效 Token 名称」里填入要使用的 Token 名称（须与列表中的名称完全一致，区分大小写）。
+3. 进入全屏时，插件会把该 Token 的变量注入到编辑器容器内，退出全屏后自动移除。名称留空或在列表中找不到对应项时，使用 Halo 控制台默认配色。
+
+支持的变量及用途：
+
+| 变量 | 用途 |
+| --- | --- |
+| `--hs-vditor-bg` | 编辑区背景 |
+| `--hs-vditor-fg` | 正文文字颜色 |
+| `--hs-vditor-toolbar-bg` | 工具栏背景 |
+| `--hs-vditor-border` | 边框 / 分割线颜色 |
+| `--hs-vditor-link` | 链接颜色 |
+| `--hs-vditor-code-bg` | 代码块背景 |
+| `--hs-vditor-selection` | 选中文本 / 按钮悬停背景 |
+
+示例：
+
+```css
+--hs-vditor-bg: #181818;
+--hs-vditor-fg: #e6e6e6;
+--hs-vditor-toolbar-bg: #1f1f1f;
+--hs-vditor-border: #333;
+--hs-vditor-link: #7aa2f7;
+--hs-vditor-code-bg: #242424;
+--hs-vditor-selection: rgba(122, 162, 247, 0.25);
+```
 
 ### 内容加密
 

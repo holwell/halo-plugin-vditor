@@ -736,6 +736,40 @@ const update = (val: string | null) => {
   );
 }
 
+/* 滚动条美化：只改外观，不改变原有滚动位置与布局 */
+#plugin-vditor-mde ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+#plugin-vditor-mde ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#plugin-vditor-mde ::-webkit-scrollbar-thumb {
+  background: var(--hs-vditor-scrollbar, var(--hs-vditor-border, rgba(0, 0, 0, 0.2)));
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+}
+
+#plugin-vditor-mde ::-webkit-scrollbar-thumb:hover {
+  background: var(--hs-vditor-link, #3478cd);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background-clip: padding-box;
+}
+
+#plugin-vditor-mde ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+#plugin-vditor-mde .vditor-reset {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hs-vditor-scrollbar, var(--hs-vditor-border, rgba(0, 0, 0, 0.2)))
+    transparent;
+}
+
 #plugin-vditor-mde .hs-vditor-loading {
   min-height: 480px;
 }

@@ -52,6 +52,8 @@ export function getOptions(options: Options): IOptions {
     },
     preview: {
       mode: "editor",
+      // 编辑内容的最大宽度，Vditor 会用内联 padding 将内容居中
+      maxWidth: 680,
       markdown: {
         toc: false,
         codeBlockPreview: options.codeBlockPreview,

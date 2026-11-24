@@ -66,6 +66,10 @@ const TOOLBAR_ICONS = {
 <path d="M0 0h24v24H0z" fill="none" />
 <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2 7V2h5m15 5V2h-5M7 22H2v-5m15 5h5v-5" />
 </svg>`,
+  toc: `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+<path d="M0 0h24v24H0z" fill="none" />
+<path fill="currentColor" d="M3 9h14V7H3zm0 4h14v-2H3zm0 4h14v-2H3zm16 0h2v-2h-2zm0-10v2h2V7zm0 6h2v-2h-2z" />
+</svg>`,
 };
 
 const props = withDefaults(
@@ -97,6 +101,7 @@ const pendingMomentSongs = ref<EditorSong[]>([]);
 const mediaPreviewShow = ref(false);
 const reopenMediaPreview = ref(false);
 const isFullscreen = ref(false);
+const tocVisible = ref(false);
 const editorConfig = ref<EditorConfig>();
 // 特殊插入框， 当前支持none/tips/git
 // 自定义插入
@@ -360,13 +365,27 @@ ${css}
   document.head.appendChild(style);
 };
 
+// 目录（TOC）：默认不展开，切换 Vditor 原生 outline
+const toggleToc = (force?: boolean) => {
+  const internal = vditor.value?.vditor;
+  if (!internal) return;
+  const next = force ?? !tocVisible.value;
+  tocVisible.value = next;
+  internal.outline.toggle(internal, next, false);
+};
+
 const setFullscreen = (value: boolean) => {
   isFullscreen.value = value;
   if (value) {
     applyFullscreenToken();
   } else {
     removeFullscreenToken();
+    // 退出全屏时收起目录，避免窄容器里残留侧栏
+    if (tocVisible.value) toggleToc(false);
   }
+  // Vditor 只在 window.resize 时按容器宽度重算内容居中 padding，
+  // 全屏切换容器宽度变了但不会触发 resize，手动触发一次让 680 宽度生效
+  requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
 };
 
 const toggleFullscreen = () => {
@@ -663,6 +682,14 @@ const update = (val: string | null) => {
       <button type="button" title="切换源码模式（Ctrl+/）" @click="toggleSourceMode">
         <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.source"></span>
       </button>
+      <button
+        type="button"
+        :title="tocVisible ? '收起目录' : '展开目录'"
+        :class="{ 'is-active': tocVisible }"
+        @click="toggleToc()"
+      >
+        <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.toc"></span>
+      </button>
       <button type="button" :title="isFullscreen ? '退出全屏（Esc）' : '全屏编辑'" @click="toggleFullscreen">
         <span class="hs-toolbar-icon" aria-hidden="true" v-html="TOOLBAR_ICONS.fullscreen"></span>
       </button>
@@ -779,11 +806,24 @@ const update = (val: string | null) => {
   min-height: 320px;
 }
 
+/* outline 默认由 Vditor 自身控制（初始 display:none，toggle 时设 block），不能用 !important 隐藏 */
 #plugin-vditor-mde .vditor-toolbar,
-#plugin-vditor-mde .vditor-outline,
 #plugin-vditor-mde .vditor-counter,
 #plugin-vditor-mde .vditor-preview {
   display: none !important;
+}
+
+/* 目录激活时按钮高亮 */
+.hs-editor-toolbar button.is-active {
+  background: var(--hs-vditor-selection, var(--halo-fill, rgba(0, 0, 0, 0.08)));
+}
+
+/* 目录面板宽度与配色，跟随 Token */
+#plugin-vditor-mde .vditor-outline {
+  width: 220px;
+  background: var(--hs-vditor-toolbar-bg, var(--panel-background-color, #fff));
+  color: var(--hs-vditor-fg, inherit);
+  border-right: 1px solid var(--hs-vditor-border, var(--border-color, #e5e7eb));
 }
 
 .hs-editor-toolbar {

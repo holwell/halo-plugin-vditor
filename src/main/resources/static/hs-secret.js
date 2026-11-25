@@ -3,18 +3,25 @@
  *
  * 编辑器把密文以 ::hs-secret:v1:<base64url>:: 写入 raw，
  * 渲染管线把它展开成 <div class="hs-secret" data-hs-secret="...">。
- * 这里只在访客主动输入密钥后用 WebCrypto 在浏览器本地解密，
- * 密钥不会随页面下发，也不会被保存。
+ * 只有登录用户才绑定解密点击事件；密钥输入成功后存入 localStorage，
+ * 之后点击加密块直接用缓存密钥解密，不再弹窗，但加密块外观保留到点击为止；
+ * 检测到注销时清除，避免明文密钥继续留在浏览器里。
  */
 (function () {
   if (window.__hsSecretReady) return;
   window.__hsSecretReady = true;
 
   var MODAL_ID = "hs-secret-modal";
+  var AUTH_API = "/apis/api.console.halo.run/v1alpha1/users/-";
+  var PASSWORD_KEY = "hs-secret-password";
   var ITERATIONS = 210000;
   var encoder = new TextEncoder();
   var decoder = new TextDecoder();
+
   var activeTarget = null;
+  var loggedIn = false;
+  var authChecking = false;
+  var eventsBound = false;
 
   function fromBase64Url(value) {
     var normalized = String(value).replace(/-/g, "+").replace(/_/g, "/");
@@ -31,6 +38,30 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  function readPassword() {
+    try {
+      return localStorage.getItem(PASSWORD_KEY) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function savePassword(password) {
+    try {
+      localStorage.setItem(PASSWORD_KEY, password);
+    } catch (e) {
+      console.warn("[hs-secret] 无法保存密钥到 localStorage", e);
+    }
+  }
+
+  function clearPassword() {
+    try {
+      localStorage.removeItem(PASSWORD_KEY);
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   function deriveKey(password, salt, usages) {
@@ -85,6 +116,30 @@
     );
   }
 
+  function rerenderMath() {
+    if (window.vditorRender && typeof window.vditorRender.render === "function") {
+      try {
+        window.vditorRender.render();
+      } catch (e) {
+        console.warn("[hs-secret] 重新渲染公式失败", e);
+      }
+    }
+  }
+
+  function decryptInto(target, password) {
+    return decryptText(target.getAttribute("data-hs-secret") || "", password)
+      .then(function (plain) {
+        return renderMarkdown(plain);
+      })
+      .then(function (html) {
+        var content = document.createElement("div");
+        content.className = "hs-secret-content";
+        content.innerHTML = html;
+        target.replaceWith(content);
+        rerenderMath();
+      });
+  }
+
   function ensureModal() {
     var modal = document.getElementById(MODAL_ID);
     if (modal) return modal;
@@ -95,7 +150,7 @@
     modal.innerHTML =
       '<div class="hs-secret-modal-mask" data-hs-secret-close></div>' +
       '<div class="hs-secret-modal-panel" role="dialog" aria-modal="true" aria-label="解密内容">' +
-      '<div class="hs-secret-modal-title">解密内容</div>' +
+      '<div class="hs-secret-modal-title">该部分仅登录用户可见</div>' +
       '<input type="password" class="hs-secret-modal-input" placeholder="请输入密钥" autocomplete="off" />' +
       '<div class="hs-secret-modal-error" hidden></div>' +
       '<div class="hs-secret-modal-actions">' +
@@ -112,16 +167,18 @@
     activeTarget = null;
   }
 
-  function openModal(target) {
+  function openModal(target, message) {
     var modal = ensureModal();
     activeTarget = target;
     var input = modal.querySelector(".hs-secret-modal-input");
     var error = modal.querySelector(".hs-secret-modal-error");
-    input.value = "";
+    input.value = readPassword();
     error.hidden = true;
     error.textContent = "";
     modal.hidden = false;
+    if (message) showError(modal, message);
     input.focus();
+    input.select();
   }
 
   function showError(modal, message) {
@@ -141,23 +198,10 @@
     var button = modal.querySelector(".hs-secret-modal-confirm");
     button.disabled = true;
     button.textContent = "解密中";
-    decryptText(target.getAttribute("data-hs-secret") || "", password)
-      .then(function (plain) {
-        return renderMarkdown(plain);
-      })
-      .then(function (html) {
-        var content = document.createElement("div");
-        content.className = "hs-secret-content";
-        content.innerHTML = html;
-        target.replaceWith(content);
+    decryptInto(target, password)
+      .then(function () {
+        savePassword(password);
         closeModal(modal);
-        if (window.vditorRender && typeof window.vditorRender.render === "function") {
-          try {
-            window.vditorRender.render();
-          } catch (e) {
-            console.warn("[hs-secret] 重新渲染公式失败", e);
-          }
-        }
       })
       .catch(function (e) {
         showError(modal, "解密失败，请确认密钥是否正确");
@@ -169,27 +213,120 @@
       });
   }
 
-  document.addEventListener("click", function (event) {
-    if (!(event.target instanceof Element)) return;
+  function onClick(event) {
+    if (!loggedIn || !(event.target instanceof Element)) return;
     var modal = document.getElementById(MODAL_ID);
     if (modal && !modal.hidden && event.target.closest("[data-hs-secret-close]")) {
       closeModal(modal);
       return;
     }
     var lock = event.target.closest(".hs-secret-lock");
-    if (lock) {
+    if (lock && !lock.disabled) {
       var target = lock.closest(".hs-secret");
-      if (target) openModal(target);
+      if (!target) return;
+      var cachedPassword = readPassword();
+      if (!cachedPassword) {
+        openModal(target);
+        return;
+      }
+      // 已有缓存密钥时直接点击解密，保留加密块外观直到点击，方便识别哪些内容被加密
+      lock.setAttribute("aria-busy", "true");
+      decryptInto(target, cachedPassword)
+        .catch(function () {
+          clearPassword();
+          openModal(target, "缓存密钥已失效，请重新输入");
+        })
+        .finally(function () {
+          lock.removeAttribute("aria-busy");
+        });
       return;
     }
     if (modal && !modal.hidden && event.target.closest(".hs-secret-modal-confirm")) {
       confirm(modal);
     }
-  });
+  }
 
-  document.addEventListener("keydown", function (event) {
-    if (event.key !== "Escape") return;
+  function onKeydown(event) {
+    if (!loggedIn || event.key !== "Escape") return;
     var modal = document.getElementById(MODAL_ID);
     if (modal && !modal.hidden) closeModal(modal);
+  }
+
+  function bindEvents() {
+    if (eventsBound) return;
+    document.addEventListener("click", onClick);
+    document.addEventListener("keydown", onKeydown);
+    eventsBound = true;
+  }
+
+  function unbindEvents() {
+    if (!eventsBound) return;
+    document.removeEventListener("click", onClick);
+    document.removeEventListener("keydown", onKeydown);
+    eventsBound = false;
+  }
+
+  function setLocksEnabled(enabled) {
+    var locks = document.querySelectorAll(".hs-secret-lock");
+    for (var i = 0; i < locks.length; i += 1) {
+      locks[i].disabled = !enabled;
+      if (enabled) locks[i].removeAttribute("title");
+      else locks[i].title = "该部分仅登录用户可见";
+    }
+  }
+
+  function checkAuth() {
+    if (!window.fetch) return Promise.resolve({ loggedIn: false, certain: false });
+    return fetch(AUTH_API, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    })
+      .then(function (response) {
+        if (response.status === 200) return { loggedIn: true, certain: true };
+        if (response.status === 401 || response.status === 403) {
+          return { loggedIn: false, certain: true };
+        }
+        return { loggedIn: false, certain: false };
+      })
+      .catch(function () {
+        return { loggedIn: false, certain: false };
+      });
+  }
+
+  function syncAuth() {
+    if (authChecking) return;
+    authChecking = true;
+    checkAuth()
+      .then(function (state) {
+        authChecking = false;
+        // 网络异常时保留上一次状态；明确 401/403 才判定为已注销
+        loggedIn = state.certain ? state.loggedIn : loggedIn;
+        if (state.certain && !loggedIn) {
+          clearPassword();
+          var open = document.getElementById(MODAL_ID);
+          if (open && !open.hidden) closeModal(open);
+        }
+        if (loggedIn) {
+          setLocksEnabled(true);
+          bindEvents();
+        } else {
+          unbindEvents();
+          setLocksEnabled(false);
+        }
+      })
+      .catch(function () {
+        authChecking = false;
+      });
+  }
+
+  // 登录态可能在其他标签页变化，回到页面、pjax 换页后都重新确认一次
+  document.addEventListener("pageshow", syncAuth);
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) syncAuth();
   });
+  document.addEventListener("hs:pjax:complete", syncAuth);
+  document.addEventListener("pjax:complete", syncAuth);
+
+  syncAuth();
 })();

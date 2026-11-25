@@ -225,7 +225,7 @@ export function renderCustomMarkers(html: string): string {
   });
 
   output = replaceParagraphMarker(output, "hs-secret", (payload) => {
-    return `<div class="hs-secret" data-hs-secret="${escapeHtmlAttribute(payload)}"><button type="button" class="hs-secret-lock" aria-label="解密内容">🔒 已加密内容，点击输入密钥</button></div>`;
+    return `<div class="hs-secret" data-hs-secret="${escapeHtmlAttribute(payload)}"><button type="button" class="hs-secret-lock" aria-label="该部分仅登录用户可见"><span class="hs-secret-lock-icon" aria-hidden="true">🔒</span><span>该部分仅登录用户可见</span></button></div>`;
   });
 
   // 普通音乐原位渲染：插在哪就出现在哪

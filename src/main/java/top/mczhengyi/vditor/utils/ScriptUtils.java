@@ -37,6 +37,7 @@ public class ScriptUtils {
         }
         ScriptBuilder script = new ScriptBuilder();
         script.stylesheet("hs-secret.css", "hs-secret-css")
+            .script("dist/js/lute/lute.min.js", "hs-secret-lute")
             .script("hs-secret.js", "hs-secret");
         return script.getScript() + "\n" + content;
     }

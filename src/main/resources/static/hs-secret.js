@@ -2,25 +2,31 @@
  * 前台加密内容解密脚本
  *
  * 编辑器把密文以 ::hs-secret:v1:<base64url>:: 写入 raw，
- * 渲染管线把它展开成 <div class="hs-secret" data-hs-secret="...">。
- * 只有登录用户才绑定解密点击事件；密钥输入成功后存入 localStorage，
- * 之后点击加密块直接用缓存密钥解密，不再弹窗，但加密块外观保留到点击为止；
- * 检测到注销时清除，避免明文密钥继续留在浏览器里。
+ * 渲染管线把它展开成 <p class="hs-secret" data-hs-secret="...">。
+ * 登录态由主题模板的 sec:authorize 标记提供（data-hs-auth），匿名不启用任何点击。
+ * 密钥只在本次页面会话的内存中保存，刷新即丢失；不写 localStorage。
  */
 (function () {
   if (window.__hsSecretReady) return;
   window.__hsSecretReady = true;
 
   var MODAL_ID = "hs-secret-modal";
-  var AUTH_API = "/apis/api.console.halo.run/v1alpha1/users/-";
-  var PASSWORD_KEY = "hs-secret-password";
   var ITERATIONS = 210000;
   var encoder = new TextEncoder();
   var decoder = new TextDecoder();
 
+  var LOCK_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">' +
+    '<path d="M0 0h24v24H0z" fill="none" />' +
+    '<g fill="none">' +
+    '<path fill="currentColor" d="M3.32 15.25c0-2.83 0-4.24.88-5.12s2.3-.88 5.12-.88h5.36c2.83 0 4.24 0 5.12.88s.88 2.3.88 5.12v.95c0 2.83 0 4.24-.88 5.12s-2.3.88-5.12.88H9.32c-2.83 0-4.24 0-5.12-.88s-.88-2.3-.88-5.12z" opacity=".2" />' +
+    '<path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.8 22.2h4.4c2.8 0 4.2 0 5.15-.75q.31-.26.58-.58c.75-.96.75-2.35.75-5.15c0-2.79 0-4.18-.75-5.14a4 4 0 0 0-.58-.58c-.96-.75-2.35-.75-5.14-.75H9.79c-2.79 0-4.18 0-5.14.75a4 4 0 0 0-.58.58c-.75.96-.75 2.35-.75 5.14c0 2.8 0 4.2.75 5.15q.26.31.58.58c.96.75 2.35.75 5.14.75M7.63 9.25l.47-4.04a3.96 3.96 0 0 1 7.88.04l.43 4" />' +
+    '<path fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.11 15.44a1.11 1.11 0 1 1-2.22 0a1.11 1.11 0 0 1 2.22 0" />' +
+    "</g>" +
+    "</svg>";
+
   var activeTarget = null;
-  var loggedIn = false;
-  var authChecking = false;
+  var sessionPassword = "";
   var eventsBound = false;
 
   function fromBase64Url(value) {
@@ -38,30 +44,6 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
-  }
-
-  function readPassword() {
-    try {
-      return localStorage.getItem(PASSWORD_KEY) || "";
-    } catch (e) {
-      return "";
-    }
-  }
-
-  function savePassword(password) {
-    try {
-      localStorage.setItem(PASSWORD_KEY, password);
-    } catch (e) {
-      console.warn("[hs-secret] 无法保存密钥到 localStorage", e);
-    }
-  }
-
-  function clearPassword() {
-    try {
-      localStorage.removeItem(PASSWORD_KEY);
-    } catch (e) {
-      /* ignore */
-    }
   }
 
   function deriveKey(password, salt, usages) {
@@ -107,10 +89,13 @@
   }
 
   function renderMarkdown(markdown) {
-    if (window.Vditor && typeof window.Vditor.md2html === "function") {
-      return Promise.resolve(window.Vditor.md2html(markdown)).then(sanitizeHtml);
+    // 插件已注入自带 Lute，直接同步渲染，保留 h1~h6 / 列表 / 引用等结构
+    if (window.Lute && typeof window.Lute.New === "function") {
+      var lute = window.Lute.New();
+      if (typeof lute.SetHeadingID === "function") lute.SetHeadingID(false);
+      return Promise.resolve(lute.Md2HTML(markdown)).then(sanitizeHtml);
     }
-    // 没有加载 Vditor 时退化为纯文本，保证内容仍可读
+    // 极端情况下 Lute 未加载，退化为纯文本，保证内容仍可读
     return Promise.resolve(
       '<div class="hs-secret-plaintext">' + escapeHtml(markdown).replace(/\n/g, "<br />") + "</div>",
     );
@@ -126,6 +111,46 @@
     }
   }
 
+  function setOpen(target, open) {
+    var content = target.__hsSecretContent;
+    if (!content) return;
+    var body = content.querySelector(".hs-secret-content-body");
+    if (content._toggleTimer) {
+      clearTimeout(content._toggleTimer);
+      content._toggleTimer = 0;
+    }
+    if (open) {
+      target.hidden = true;
+      content.hidden = false;
+      content.classList.add("is-open");
+      body.style.overflow = "hidden";
+      body.style.maxHeight = "0px";
+      // 强制一次布局后再展开，确保 transition 生效
+      void body.offsetHeight;
+      requestAnimationFrame(function () {
+        body.style.maxHeight = body.scrollHeight + "px";
+      });
+      content._toggleTimer = setTimeout(function () {
+        body.style.maxHeight = "";
+        body.style.overflow = "";
+      }, 320);
+    } else {
+      body.style.overflow = "hidden";
+      body.style.maxHeight = body.scrollHeight + "px";
+      void body.offsetHeight;
+      requestAnimationFrame(function () {
+        body.style.maxHeight = "0px";
+      });
+      content._toggleTimer = setTimeout(function () {
+        content.hidden = true;
+        content.classList.remove("is-open");
+        target.hidden = false;
+        body.style.maxHeight = "";
+        body.style.overflow = "";
+      }, 300);
+    }
+  }
+
   function decryptInto(target, password) {
     return decryptText(target.getAttribute("data-hs-secret") || "", password)
       .then(function (plain) {
@@ -134,8 +159,24 @@
       .then(function (html) {
         var content = document.createElement("div");
         content.className = "hs-secret-content";
-        content.innerHTML = html;
-        target.replaceWith(content);
+        content.hidden = true;
+
+        var mark = document.createElement("button");
+        mark.type = "button";
+        mark.className = "hs-secret-content-mark";
+        mark.setAttribute("aria-label", "收起加密内容");
+        mark.title = "收起加密内容";
+        mark.innerHTML = LOCK_SVG;
+
+        var body = document.createElement("div");
+        body.className = "hs-secret-content-body";
+        body.innerHTML = html;
+
+        content.appendChild(mark);
+        content.appendChild(body);
+        target.__hsSecretContent = content;
+        target.parentNode.insertBefore(content, target.nextSibling);
+        setOpen(target, true);
         rerenderMath();
       });
   }
@@ -172,13 +213,12 @@
     activeTarget = target;
     var input = modal.querySelector(".hs-secret-modal-input");
     var error = modal.querySelector(".hs-secret-modal-error");
-    input.value = readPassword();
+    input.value = "";
     error.hidden = true;
     error.textContent = "";
     modal.hidden = false;
     if (message) showError(modal, message);
     input.focus();
-    input.select();
   }
 
   function showError(modal, message) {
@@ -200,7 +240,8 @@
     button.textContent = "解密中";
     decryptInto(target, password)
       .then(function () {
-        savePassword(password);
+        // 仅在本次页面会话内存中保留，刷新即失效
+        sessionPassword = password;
         closeModal(modal);
       })
       .catch(function (e) {
@@ -214,42 +255,64 @@
   }
 
   function onClick(event) {
-    if (!loggedIn || !(event.target instanceof Element)) return;
+    if (!isLoggedIn() || !(event.target instanceof Element)) return;
     var modal = document.getElementById(MODAL_ID);
     if (modal && !modal.hidden && event.target.closest("[data-hs-secret-close]")) {
       closeModal(modal);
       return;
     }
+
+    var mark = event.target.closest(".hs-secret-content-mark");
+    if (mark) {
+      var content = mark.closest(".hs-secret-content");
+      if (content && content.previousElementSibling) {
+        setOpen(content.previousElementSibling, false);
+      }
+      return;
+    }
+
     var lock = event.target.closest(".hs-secret-lock");
     if (lock && !lock.disabled) {
       var target = lock.closest(".hs-secret");
       if (!target) return;
-      var cachedPassword = readPassword();
-      if (!cachedPassword) {
+      if (target.__hsSecretContent) {
+        setOpen(target, true);
+        return;
+      }
+      if (!sessionPassword) {
         openModal(target);
         return;
       }
-      // 已有缓存密钥时直接点击解密，保留加密块外观直到点击，方便识别哪些内容被加密
       lock.setAttribute("aria-busy", "true");
-      decryptInto(target, cachedPassword)
+      decryptInto(target, sessionPassword)
         .catch(function () {
-          clearPassword();
-          openModal(target, "缓存密钥已失效，请重新输入");
+          sessionPassword = "";
+          openModal(target, "会话内密钥已失效，请重新输入");
         })
         .finally(function () {
           lock.removeAttribute("aria-busy");
         });
       return;
     }
+
     if (modal && !modal.hidden && event.target.closest(".hs-secret-modal-confirm")) {
       confirm(modal);
     }
   }
 
   function onKeydown(event) {
-    if (!loggedIn || event.key !== "Escape") return;
+    if (!isLoggedIn() || event.key !== "Escape") return;
     var modal = document.getElementById(MODAL_ID);
     if (modal && !modal.hidden) closeModal(modal);
+  }
+
+  function isLoggedIn() {
+    return !!document.querySelector('[data-hs-auth="logged-in"]');
+  }
+
+  function setLocksEnabled(enabled) {
+    var locks = document.querySelectorAll(".hs-secret-lock");
+    for (var i = 0; i < locks.length; i += 1) locks[i].disabled = !enabled;
   }
 
   function bindEvents() {
@@ -266,67 +329,16 @@
     eventsBound = false;
   }
 
-  function setLocksEnabled(enabled) {
-    var locks = document.querySelectorAll(".hs-secret-lock");
-    for (var i = 0; i < locks.length; i += 1) {
-      locks[i].disabled = !enabled;
-      if (enabled) locks[i].removeAttribute("title");
-      else locks[i].title = "该部分仅登录用户可见";
-    }
+  function syncFromTemplate() {
+    var loggedIn = isLoggedIn();
+    setLocksEnabled(loggedIn);
+    if (loggedIn) bindEvents();
+    else unbindEvents();
   }
 
-  function checkAuth() {
-    if (!window.fetch) return Promise.resolve({ loggedIn: false, certain: false });
-    return fetch(AUTH_API, {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    })
-      .then(function (response) {
-        if (response.status === 200) return { loggedIn: true, certain: true };
-        if (response.status === 401 || response.status === 403) {
-          return { loggedIn: false, certain: true };
-        }
-        return { loggedIn: false, certain: false };
-      })
-      .catch(function () {
-        return { loggedIn: false, certain: false };
-      });
-  }
+  // pjax 换页后新插入的加密块需要重新按模板登录态启用
+  document.addEventListener("hs:pjax:complete", syncFromTemplate);
+  document.addEventListener("pjax:complete", syncFromTemplate);
 
-  function syncAuth() {
-    if (authChecking) return;
-    authChecking = true;
-    checkAuth()
-      .then(function (state) {
-        authChecking = false;
-        // 网络异常时保留上一次状态；明确 401/403 才判定为已注销
-        loggedIn = state.certain ? state.loggedIn : loggedIn;
-        if (state.certain && !loggedIn) {
-          clearPassword();
-          var open = document.getElementById(MODAL_ID);
-          if (open && !open.hidden) closeModal(open);
-        }
-        if (loggedIn) {
-          setLocksEnabled(true);
-          bindEvents();
-        } else {
-          unbindEvents();
-          setLocksEnabled(false);
-        }
-      })
-      .catch(function () {
-        authChecking = false;
-      });
-  }
-
-  // 登录态可能在其他标签页变化，回到页面、pjax 换页后都重新确认一次
-  document.addEventListener("pageshow", syncAuth);
-  document.addEventListener("visibilitychange", function () {
-    if (!document.hidden) syncAuth();
-  });
-  document.addEventListener("hs:pjax:complete", syncAuth);
-  document.addEventListener("pjax:complete", syncAuth);
-
-  syncAuth();
+  syncFromTemplate();
 })();

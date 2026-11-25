@@ -1,6 +1,8 @@
 const TAG_LIST_API = "/apis/api.content.halo.run/v1alpha1/tags?size=1000";
 const TAG_CREATE_API = "/apis/content.halo.run/v1alpha1/tags";
-const POST_API = "/apis/uc.api.content.halo.run/v1alpha1/posts";
+// 文章资源本身带 spec.tags / spec.categories；draft 端点返回 Snapshot，不含 metadata。
+const POST_API = "/apis/content.halo.run/v1alpha1/posts";
+const UC_POST_API = "/apis/uc.api.content.halo.run/v1alpha1/posts";
 const CATEGORY_API = "/apis/api.content.halo.run/v1alpha1/categories?size=1000";
 
 export interface TagInfo {
@@ -87,34 +89,39 @@ export const loadAllTags = async (): Promise<TagInfo[]> => {
   }
 };
 
-/** 读取文章当前关联的标签名，优先取草稿上的值以反映未发布修改。 */
-export const fetchPostTagNames = async (name: string): Promise<string[]> => {
-  if (!name) return [];
-  try {
-    const [postResponse, draftResponse] = await Promise.all([
-      fetch(`${POST_API}/${name}`, { credentials: "same-origin" }),
-      fetch(`${POST_API}/${name}/draft?patched=false`, { credentials: "same-origin" }),
-    ]);
-    const response = draftResponse.ok ? draftResponse : postResponse;
-    if (!response.ok) return [];
-    const data = (await response.json()) as Record<string, any>;
-    const tags = data?.spec?.tags;
-    return Array.isArray(tags) ? tags.map(String) : [];
-  } catch {
-    return [];
+/** 读取当前文章资源：控制台优先用 core API，兼容 UC API。不要用 draft 端点读标签。 */
+const fetchPostResource = async (name: string): Promise<Record<string, any> | null> => {
+  if (!name) return null;
+  const encoded = encodeURIComponent(name);
+  const urls = [`${POST_API}/${encoded}`, `${UC_POST_API}/${encoded}`];
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { credentials: "same-origin" });
+      if (!response.ok) continue;
+      return (await response.json()) as Record<string, any>;
+    } catch {
+      // 继续尝试下一个端点
+    }
   }
+  return null;
+};
+
+/** 读取文章当前关联的标签名。标签在 Post.spec.tags，不在 Snapshot 里。 */
+export const fetchPostTagNames = async (name: string): Promise<string[]> => {
+  const post = await fetchPostResource(name);
+  const tags = post?.spec?.tags;
+  return Array.isArray(tags) ? tags.map(String) : [];
 };
 
 /** 判断文章是否属于 moments 分类：只有瞬间才给标签链接加 scope=moment。 */
 export const checkPostIsMoment = async (name: string): Promise<boolean> => {
   if (!name) return false;
   try {
-    const [postResponse, categoryResponse] = await Promise.all([
-      fetch(`${POST_API}/${name}`, { credentials: "same-origin" }),
+    const [post, categoryResponse] = await Promise.all([
+      fetchPostResource(name),
       fetch(CATEGORY_API, { credentials: "same-origin" }),
     ]);
-    if (!postResponse.ok || !categoryResponse.ok) return false;
-    const post = (await postResponse.json()) as Record<string, any>;
+    if (!post || !categoryResponse.ok) return false;
     const categoryData = (await categoryResponse.json()) as Record<string, any>;
     const categories = Array.isArray(categoryData)
       ? categoryData
@@ -135,11 +142,12 @@ export const checkPostIsMoment = async (name: string): Promise<boolean> => {
 /** 把当前标签关联写入文章，只改 spec.tags，不碰正文/发布时间/可见性。 */
 export const pushTagAssociations = async (name: string, tags: string[]): Promise<void> => {
   if (!name) return;
-  const latestResponse = await fetch(`${POST_API}/${name}`, { credentials: "same-origin" });
+  const encoded = encodeURIComponent(name);
+  const latestResponse = await fetch(`${POST_API}/${encoded}`, { credentials: "same-origin" });
   if (!latestResponse.ok) throw new Error(await describeFailure(latestResponse));
   const latest = (await latestResponse.json()) as Record<string, any>;
   const updated = { ...latest, spec: { ...latest.spec, tags } };
-  const response = await fetch(`${POST_API}/${name}`, {
+  const response = await fetch(`${POST_API}/${encoded}`, {
     method: "PUT",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },

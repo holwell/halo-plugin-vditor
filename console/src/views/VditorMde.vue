@@ -527,8 +527,9 @@ const pushAssociations = async () => {
   }
 };
 
-const ensureTagData = async () => {
-  if (tagsLoaded.value) return;
+const ensureTagData = async (force = false) => {
+  // 每次重新打开面板都刷新一次，避免上次读取失败后一直沿用空列表。
+  if (tagsLoaded.value && !force) return;
   allTags.value = await loadAllTags();
   if (postName.value) {
     const [names, moment] = await Promise.all([
@@ -539,15 +540,17 @@ const ensureTagData = async () => {
     // 标签列表接口可能没返回某些已关联标签，补占位，保证弹窗仍能显示和取消关联
     names.forEach((name) => {
       if (!allTags.value.some((tag) => tag.name === name)) {
+        const location = /^loc[_-]/i.test(name);
+        const matchText = name.replace(/^loc[_-]/i, "");
         allTags.value = [
           ...allTags.value,
           {
             name,
-            displayName: name,
+            displayName: location ? matchText : name,
             slug: name,
             permalink: `/tags/${name}`,
-            location: false,
-            matchText: name,
+            location,
+            matchText,
           },
         ];
       }
@@ -603,7 +606,7 @@ const addTagByText = async (payload: { text: string; location: boolean }) => {
 
 watch(mediaPreviewShow, (open) => {
   if (open) {
-    void ensureTagData().then(() => analyzeTags());
+    void ensureTagData(tagsLoaded.value).then(() => analyzeTags());
     return;
   }
   if (tagAnalyzeTimer !== null) {

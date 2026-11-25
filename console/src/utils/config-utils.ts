@@ -15,7 +15,7 @@ export declare type EditorConfig = {
   };
   extension: {
     allowImageType: string;
-    songsApi: string;
+    searchApi: string;
   };
   security: {
     encryptionKey: string;
@@ -46,7 +46,7 @@ export const defaultEditorConfig: EditorConfig = {
   },
   extension: {
     allowImageType: "png,jpg,jpeg,bmp,gif,webp,svg",
-    songsApi: "/apis/api.aplayer-backend/v1alpha1/songs",
+    searchApi: "/apis/api.aplayer-backend/v1alpha1/search",
   },
   security: {
     encryptionKey: "",

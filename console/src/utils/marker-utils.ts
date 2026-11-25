@@ -7,6 +7,7 @@ export type EditorSong = {
   url: string;
   cover?: string;
   lrc?: string;
+  album?: string;
 };
 
 export type EditorGallery = {

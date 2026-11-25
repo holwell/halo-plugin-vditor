@@ -93,10 +93,10 @@ spec:
           help: 自定义允许上传的图片格式
           value: "png,jpg,jpeg,bmp,gif,webp,svg"
         - $formkit: text
-          name: songsApi
-          label: 全部歌曲接口
-          help: 编辑器「插入音乐 / 瞬间音乐」读取的歌曲列表接口；默认使用 aplayer-backend 插件的全部歌曲接口。
-          value: "/apis/api.aplayer-backend/v1alpha1/songs"
+          name: searchApi
+          label: 歌曲搜索接口
+          help: 编辑器「插入音乐 / 瞬间音乐」按关键词搜索歌曲的接口；默认使用 aplayer-backend 插件的搜索接口。
+          value: "/apis/api.aplayer-backend/v1alpha1/search"
     - group: security
       label: 内容加密
       formSchema:

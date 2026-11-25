@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Vditor from "vditor";
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 
 import "vditor/dist/index.css";
 
@@ -109,7 +109,6 @@ const attachmentSelectorModalShow = ref(false);
 const attachmentSelectionMode = ref<"image" | "gallery">("image");
 const songPickerShow = ref(false);
 const songPickerMode = ref<"inline" | "moment">("inline");
-const songs = ref<EditorSong[]>([]);
 // 九宫格与瞬间音乐只在内存中缓存，编辑区不显示，发布时追加到 raw 末尾
 const pendingGallery = ref<EditorGallery>({ images: [] });
 const pendingMomentSongs = ref<EditorSong[]>([]);
@@ -284,35 +283,15 @@ const openAttachmentPicker = (mode: "image" | "gallery") => {
   attachmentSelectorModalShow.value = true;
 };
 
-const loadSongs = async () => {
-  const api = editorConfig.value?.extension.songsApi || defaultEditorConfig.extension.songsApi;
-  try {
-    const response = await fetch(api);
-    if (!response.ok) throw new Error(String(response.status));
-    const data = await response.json();
-    const list = Array.isArray(data) ? data : (data.songs ?? []);
-    songs.value = (list as Record<string, unknown>[])
-      .map((item) => ({
-        id: String(item.id ?? ""),
-        name: String(item.name ?? ""),
-        artist: String(item.artist ?? ""),
-        url: String(item.url ?? ""),
-        cover: String(item.cover ?? ""),
-        lrc: String(item.lrc ?? ""),
-      }))
-      .filter((song) => Boolean(song.name && song.url));
-  } catch {
-    songs.value = [];
-    vditor.value?.tip("歌曲列表加载失败，请检查 aplayer-backend 插件与歌曲接口配置", 3000);
-  }
-};
-
-const openSongPicker = async (mode: "inline" | "moment") => {
+const openSongPicker = (mode: "inline" | "moment") => {
   lastSelectionRange = getCursor();
   songPickerMode.value = mode;
   songPickerShow.value = true;
-  await loadSongs();
 };
+
+const songSearchApi = computed(
+  () => editorConfig.value?.extension.searchApi || defaultEditorConfig.extension.searchApi,
+);
 
 const selectSong = (song: EditorSong) => {
   if (songPickerMode.value === "moment") {
@@ -1002,7 +981,7 @@ const update = (val: string | null) => {
     />
     <SongPickerModal
       :open="songPickerShow"
-      :songs="songs"
+      :search-api="songSearchApi"
       @close="songPickerShow = false"
       @select="selectSong"
     />

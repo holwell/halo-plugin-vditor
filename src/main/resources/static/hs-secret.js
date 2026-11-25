@@ -4,7 +4,8 @@
  * 编辑器把密文以 ::hs-secret:v1:<base64url>:: 写入 raw，
  * 渲染管线把它展开成 <p class="hs-secret" data-hs-secret="...">。
  * 登录态由主题模板的 sec:authorize 标记提供（data-hs-auth），匿名不启用任何点击。
- * 密钥只在本次页面会话的内存中保存，刷新即丢失；不写 localStorage。
+ * 登录时密钥持久化到 localStorage，刷新/重开浏览器仍免密；
+ * 一旦页面渲染出匿名标记（注销后的前台页面），立即清除 localStorage 与内存密钥。
  */
 (function () {
   if (window.__hsSecretReady) return;
@@ -16,10 +17,37 @@
   var decoder = new TextDecoder();
 
 
+  var PASSWORD_KEY = "hs-secret-password";
+
   var activeTarget = null;
-  // pjax 换页不重载此脚本，密钥跨 pjax 保留；只有整页刷新才会清空。
   var sessionPassword = "";
   var eventsBound = false;
+
+  function readPassword() {
+    try {
+      return localStorage.getItem(PASSWORD_KEY) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function savePassword(password) {
+    sessionPassword = password;
+    try {
+      localStorage.setItem(PASSWORD_KEY, password);
+    } catch (e) {
+      // 隐私模式或存储被禁用时，仍保留当前页面内存中的密钥
+    }
+  }
+
+  function clearPassword() {
+    sessionPassword = "";
+    try {
+      localStorage.removeItem(PASSWORD_KEY);
+    } catch (e) {
+      // 忽略存储异常
+    }
+  }
 
   function fromBase64Url(value) {
     var normalized = String(value).replace(/-/g, "+").replace(/_/g, "/");
@@ -261,8 +289,7 @@
     button.textContent = "解密中";
     decryptInto(target, password)
       .then(function () {
-        // 仅在本次页面会话内存中保留，刷新即失效
-        sessionPassword = password;
+        savePassword(password);
         closeModal(modal);
       })
       .catch(function (e) {
@@ -307,8 +334,8 @@
       lock.setAttribute("aria-busy", "true");
       decryptInto(target, sessionPassword)
         .catch(function () {
-          sessionPassword = "";
-          openModal(target, "会话内密钥已失效，请重新输入");
+          clearPassword();
+          openModal(target, "已保存的密钥已失效，请重新输入");
         })
         .finally(function () {
           lock.removeAttribute("aria-busy");
@@ -332,6 +359,10 @@
     return !!document.querySelector('[data-hs-auth="logged-in"]');
   }
 
+  function isAnonymous() {
+    return !!document.querySelector('[data-hs-auth="anonymous"]');
+  }
+
   function setLocksEnabled(enabled) {
     var locks = document.querySelectorAll(".hs-secret-lock");
     for (var i = 0; i < locks.length; i += 1) locks[i].disabled = !enabled;
@@ -352,21 +383,36 @@
   }
 
   function syncFromTemplate() {
-    // pjax 可能换掉正文节点；若弹窗指向的旧节点已脱离文档，关掉弹窗，
-    // 但保留 sessionPassword，避免同会话内重复输密钥。
+    // pjax 可能换掉正文节点；若弹窗指向的旧节点已脱离文档，关掉弹窗。
     var modal = document.getElementById(MODAL_ID);
     if (modal && !modal.hidden && activeTarget && !document.contains(activeTarget)) closeModal(modal);
+
+    // 匿名标记由服务端渲染；一旦出现，立即清除持久化密钥。
+    if (isAnonymous()) clearPassword();
     var loggedIn = isLoggedIn();
+    if (loggedIn && !sessionPassword) sessionPassword = readPassword();
     setLocksEnabled(loggedIn);
     if (loggedIn) bindEvents();
     else unbindEvents();
   }
 
   // 主题 pjax 在 window 上派发完成事件；这里同时兼容在 document 上派发的实现。
-  // 新插入的加密块需要重新按模板登录态启用，sessionPassword 保持不变以维持同会话免密。
+  // 新插入的加密块需要重新按模板登录态启用；已保存密钥跨 pjax 继续免密。
   ["pjax:complete", "halo:pjax:complete", "hs:pjax:ready", "hs:pjax:complete"].forEach(function (name) {
     window.addEventListener(name, syncFromTemplate);
     document.addEventListener(name, syncFromTemplate);
+  });
+
+  // 浏览器从 bfcache 恢复时同步一次；跨标签页清除/写入密钥也同步到本页。
+  window.addEventListener("pageshow", syncFromTemplate);
+  window.addEventListener("storage", function (event) {
+    if (event.key !== PASSWORD_KEY) return;
+    if (!event.newValue) {
+      clearPassword();
+      syncFromTemplate();
+    } else if (isLoggedIn() && !sessionPassword) {
+      sessionPassword = event.newValue;
+    }
   });
 
   // 脚本由 PostContentHandler 注入在正文最前面，执行时加密按钮还没进入 DOM，

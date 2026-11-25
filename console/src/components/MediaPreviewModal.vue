@@ -105,47 +105,15 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
 <template>
   <Teleport to="body">
     <div v-if="open" class="hs-media-mask" @click.self="emit('close')">
-      <div class="hs-media-modal" role="dialog" aria-modal="true" aria-label="瞬间内容设置">
+      <div class="hs-media-modal" role="dialog" aria-modal="true" aria-label="瞬间内容">
         <div class="hs-media-head">
-          <strong>瞬间内容设置</strong>
+          <span></span>
           <button type="button" class="hs-media-close" aria-label="关闭" @click="emit('close')">×</button>
         </div>
-        <p class="hs-media-hint">图片、音乐、标签与位置在编辑区不显示，发布时自动写入正文或文章属性。</p>
-        <p v-if="!postName" class="hs-media-warning">
-          当前是新建文章，暂时无法同步标签关联。发布后重新编辑，即可在这里匹配和关联标签。
-        </p>
 
-        <div class="hs-media-section">
+        <div class="hs-media-section is-first">
           <div class="hs-media-section-head">
-            <span>九宫格（{{ galleryImages.length }}）</span>
-            <button type="button" class="hs-media-edit" @click="emit('editGallery')">添加</button>
-          </div>
-          <div v-if="galleryImages.length" class="hs-media-grid">
-            <div v-for="(url, index) in galleryImages" :key="`${url}-${index}`" class="hs-media-thumb">
-              <img :src="url" alt="" />
-              <button type="button" class="hs-media-remove" title="移除" @click="emit('removeGallery', index)">×</button>
-            </div>
-          </div>
-          <div v-else class="hs-media-empty">尚未选择图片</div>
-        </div>
-
-        <div class="hs-media-section">
-          <div class="hs-media-section-head">
-            <span>瞬间音乐（{{ momentSongs.length }}）</span>
-            <button type="button" class="hs-media-edit" @click="emit('editMoment')">添加</button>
-          </div>
-          <ul v-if="momentSongs.length" class="hs-media-songs">
-            <li v-for="(song, index) in momentSongs" :key="`${song.url}-${index}`">
-              <span>{{ song.name }}<em v-if="song.artist"> - {{ song.artist }}</em></span>
-              <button type="button" class="hs-media-remove-inline" title="移除" @click="emit('removeMoment', index)">×</button>
-            </li>
-          </ul>
-          <div v-else class="hs-media-empty">尚未选择音乐</div>
-        </div>
-
-        <div class="hs-media-section">
-          <div class="hs-media-section-head">
-            <span>已匹配待确认标签</span>
+            <span>待确认标签</span>
           </div>
           <div v-if="candidateTags.length" class="hs-tag-row">
             <button
@@ -159,7 +127,6 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
               #{{ tag.displayName }}
             </button>
           </div>
-          <div v-else class="hs-media-empty">正文里还没有匹配到新的标签</div>
         </div>
 
         <div class="hs-media-section">
@@ -179,7 +146,6 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
               #{{ tag.displayName }}<span class="hs-tag-chip-remove">×</span>
             </button>
           </div>
-          <div v-else class="hs-media-empty">尚未关联普通标签</div>
           <div class="hs-tag-input-wrap">
             <input
               v-model="tagInput"
@@ -219,7 +185,6 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
               {{ tag.matchText }}<span class="hs-tag-chip-remove">×</span>
             </button>
           </div>
-          <div v-else class="hs-media-empty">尚未选择位置</div>
           <div class="hs-tag-input-wrap">
             <input
               v-model="locInput"
@@ -238,6 +203,32 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
               >
                 位置：{{ tag.matchText }}
               </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="hs-media-section">
+          <div class="hs-media-section-head">
+            <span>瞬间音乐</span>
+            <button type="button" class="hs-media-edit" title="添加瞬间音乐" @click="emit('editMoment')">添加</button>
+          </div>
+          <ul v-if="momentSongs.length" class="hs-media-songs">
+            <li v-for="(song, index) in momentSongs" :key="`${song.url}-${index}`">
+              <span>{{ song.name }}<em v-if="song.artist"> - {{ song.artist }}</em></span>
+              <button type="button" class="hs-media-remove-inline" title="移除" @click="emit('removeMoment', index)">×</button>
+            </li>
+          </ul>
+        </div>
+
+        <div class="hs-media-section">
+          <div class="hs-media-section-head">
+            <span>九宫格</span>
+            <button type="button" class="hs-media-edit" title="添加九宫格图片" @click="emit('editGallery')">添加</button>
+          </div>
+          <div v-if="galleryImages.length" class="hs-media-grid">
+            <div v-for="(url, index) in galleryImages" :key="`${url}-${index}`" class="hs-media-thumb">
+              <img :src="url" alt="" />
+              <button type="button" class="hs-media-remove" title="移除" @click="emit('removeGallery', index)">×</button>
             </div>
           </div>
         </div>
@@ -262,7 +253,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
   width: min(620px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
   overflow: auto;
-  padding: 16px;
+  padding: 12px 16px 16px;
   border-radius: 10px;
   background: var(--halo-surface, #fff);
   color: inherit;
@@ -273,6 +264,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-height: 20px;
 }
 
 .hs-media-close {
@@ -284,25 +276,15 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
   color: inherit;
 }
 
-.hs-media-hint {
-  margin: 6px 0 12px;
-  font-size: 12px;
-  opacity: 0.7;
-}
-
-.hs-media-warning {
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(234, 179, 8, 0.12);
-  color: var(--halo-text, inherit);
-  font-size: 12px;
-}
-
 .hs-media-section {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--halo-divider, #e5e7eb);
+}
+
+.hs-media-section.is-first {
+  margin-top: 4px;
+  border-top: 0;
 }
 
 .hs-media-section-head {
@@ -385,12 +367,6 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
   cursor: pointer;
 }
 
-.hs-media-empty {
-  padding: 10px 0;
-  font-size: 12px;
-  opacity: 0.6;
-}
-
 .hs-tag-row {
   display: flex;
   flex-wrap: wrap;
@@ -417,12 +393,18 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
 
 .hs-tag-chip.is-matched {
   border-color: var(--halo-primary, #2563eb);
-  background: color-mix(in srgb, var(--halo-primary, #2563eb) 18%, transparent);
+  background: var(--halo-primary, #2563eb);
+  color: #fff;
   font-weight: 600;
 }
 
+.hs-tag-chip.is-matched .hs-tag-chip-remove {
+  opacity: 0.85;
+}
+
 .hs-tag-chip.is-unmatched {
-  opacity: 0.62;
+  background: transparent;
+  opacity: 0.65;
 }
 
 .hs-tag-chip.is-location {

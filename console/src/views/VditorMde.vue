@@ -30,6 +30,7 @@ import {
 } from "@/utils/marker-utils";
 import {
   autoMatchTagNames,
+  checkPostIsMoment,
   fetchPostTagNames,
   findOrCreateTag,
   getPostNameFromRoute,
@@ -138,6 +139,7 @@ const matchedTags = ref<Set<string>>(new Set());
 const candidateTags = ref<Set<string>>(new Set());
 const locOrder = ref<string[]>([]);
 const tagsLoaded = ref(false);
+const isMomentPost = ref(false);
 let tagAnalyzeTimer: number | null = null;
 let tagSyncTimer: number | null = null;
 let tagSyncInFlight = false;
@@ -188,7 +190,13 @@ const debounceOnUpdate = async () => {
   if (postName.value && allTags.value.length) {
     const plain = plainBodyForMatch(value, allTags.value);
     const locationLinks = matchLocationTags(plain, allTags.value);
-    value = linkTagsInMarkdown(plain, allTags.value, new Set(associatedTags.value), locationLinks, true);
+    value = linkTagsInMarkdown(
+      plain,
+      allTags.value,
+      new Set(associatedTags.value),
+      locationLinks,
+      isMomentPost.value,
+    );
   }
 
   const password = editorConfig.value?.security.encryptionKey || "";
@@ -523,7 +531,27 @@ const ensureTagData = async () => {
   if (tagsLoaded.value) return;
   allTags.value = await loadAllTags();
   if (postName.value) {
-    const names = await fetchPostTagNames(postName.value);
+    const [names, moment] = await Promise.all([
+      fetchPostTagNames(postName.value),
+      checkPostIsMoment(postName.value),
+    ]);
+    isMomentPost.value = moment;
+    // 标签列表接口可能没返回某些已关联标签，补占位，保证弹窗仍能显示和取消关联
+    names.forEach((name) => {
+      if (!allTags.value.some((tag) => tag.name === name)) {
+        allTags.value = [
+          ...allTags.value,
+          {
+            name,
+            displayName: name,
+            slug: name,
+            permalink: `/tags/${name}`,
+            location: false,
+            matchText: name,
+          },
+        ];
+      }
+    });
     associatedTags.value = new Set(names);
     locOrder.value = names.filter((name) =>
       allTags.value.some((tag) => tag.name === name && tag.location),
@@ -531,6 +559,7 @@ const ensureTagData = async () => {
     lastSyncedTagsKey = orderedTagNames().join("\u0000");
   }
   tagsLoaded.value = true;
+  void debounceOnUpdate();
 };
 
 const associateTag = (name: string) => {
@@ -542,6 +571,7 @@ const associateTag = (name: string) => {
   const tag = allTags.value.find((item) => item.name === name);
   if (tag?.location && !locOrder.value.includes(name)) locOrder.value = [...locOrder.value, name];
   analyzeTags();
+  void debounceOnUpdate();
   scheduleTagSync();
 };
 
@@ -552,6 +582,7 @@ const unassociateTag = (name: string) => {
   associatedTags.value = next;
   locOrder.value = locOrder.value.filter((item) => item !== name);
   analyzeTags();
+  void debounceOnUpdate();
   scheduleTagSync();
 };
 
@@ -561,6 +592,7 @@ const addTagByText = async (payload: { text: string; location: boolean }) => {
     const tag = await findOrCreateTag(payload.text, payload.location, allTags.value);
     allTags.value = [...allTags.value];
     associateTag(tag.name);
+    void debounceOnUpdate();
   } catch (error) {
     vditor.value?.tip(
       error instanceof Error ? `创建标签失败：${error.message}` : "创建标签失败。",

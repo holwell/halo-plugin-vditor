@@ -1,6 +1,7 @@
 const TAG_LIST_API = "/apis/api.content.halo.run/v1alpha1/tags?size=1000";
 const TAG_CREATE_API = "/apis/content.halo.run/v1alpha1/tags";
 const POST_API = "/apis/uc.api.content.halo.run/v1alpha1/posts";
+const CATEGORY_API = "/apis/api.content.halo.run/v1alpha1/categories?size=1000";
 
 export interface TagInfo {
   name: string;
@@ -101,6 +102,33 @@ export const fetchPostTagNames = async (name: string): Promise<string[]> => {
     return Array.isArray(tags) ? tags.map(String) : [];
   } catch {
     return [];
+  }
+};
+
+/** 判断文章是否属于 moments 分类：只有瞬间才给标签链接加 scope=moment。 */
+export const checkPostIsMoment = async (name: string): Promise<boolean> => {
+  if (!name) return false;
+  try {
+    const [postResponse, categoryResponse] = await Promise.all([
+      fetch(`${POST_API}/${name}`, { credentials: "same-origin" }),
+      fetch(CATEGORY_API, { credentials: "same-origin" }),
+    ]);
+    if (!postResponse.ok || !categoryResponse.ok) return false;
+    const post = (await postResponse.json()) as Record<string, any>;
+    const categoryData = (await categoryResponse.json()) as Record<string, any>;
+    const categories = Array.isArray(categoryData)
+      ? categoryData
+      : ((categoryData?.items ?? []) as Record<string, any>[]);
+    const moments = categories.find(
+      (item) => item?.spec?.slug === "moments" || item?.metadata?.name === "moments",
+    );
+    if (!moments?.metadata?.name) return false;
+    const postCategories = post?.spec?.categories;
+    return Array.isArray(postCategories)
+      ? postCategories.map(String).includes(String(moments.metadata.name))
+      : false;
+  } catch {
+    return false;
   }
 };
 

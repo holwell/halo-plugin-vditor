@@ -108,7 +108,10 @@
     if (!lock) return;
     if (expanded) {
       if (!target.__hsSecretCollapsedHtml) target.__hsSecretCollapsedHtml = lock.innerHTML;
-      lock.innerHTML = "<span>以下内容仅自己可见</span>";
+      lock.innerHTML =
+        "<span class=\"hs-secret-lock-icon\" aria-hidden=\"true\">🔓</span>" +
+        "<span>以下部分仅自己可见</span>" +
+        "<span class=\"hs-secret-lock-arrow\" aria-hidden=\"true\">🔽</span>";
       lock.setAttribute("aria-label", "收起加密内容");
     } else if (target.__hsSecretCollapsedHtml) {
       lock.innerHTML = target.__hsSecretCollapsedHtml;
@@ -183,7 +186,10 @@
         endLock.type = "button";
         endLock.className = "hs-secret-lock hs-secret-end-lock";
         endLock.setAttribute("aria-label", "收起加密内容");
-        endLock.innerHTML = "<span>以上内容仅自己可见</span>";
+        endLock.innerHTML =
+          "<span class=\"hs-secret-lock-icon\" aria-hidden=\"true\">🔓</span>" +
+          "<span>以上部分仅自己可见</span>" +
+          "<span class=\"hs-secret-lock-arrow\" aria-hidden=\"true\">🔼</span>";
         end.appendChild(endLock);
 
         target.__hsSecretContent = content;

@@ -21,6 +21,26 @@ export type SecretMarkerPayload = {
 };
 
 const encoder = new TextEncoder();
+const MEDIA_BASE = "/apis/api.aplayer-backend/v1alpha1/media/v1";
+
+const mediaUrl = (kind: string, server: string, id: string): string =>
+  `${MEDIA_BASE}/${kind}?server=${encodeURIComponent(server)}&id=${encodeURIComponent(id)}`;
+
+/** song.id 形如 server:songId，用它生成永久资源链接，不再写静态缓存地址。 */
+const normalizeSong = (song: EditorSong): EditorSong => {
+  const raw = song.id || "";
+  const index = raw.indexOf(":");
+  if (index <= 0) return song;
+  const server = raw.slice(0, index);
+  const id = raw.slice(index + 1);
+  if (!server || !id) return song;
+  return {
+    ...song,
+    url: mediaUrl("audio", server, id),
+    cover: song.cover ? mediaUrl("cover", server, id) : "",
+    lrc: song.lrc ? mediaUrl("lrc", server, id) : "",
+  };
+};
 
 export function encodeMarkerData(data: unknown): string {
   return toBase64Url(encoder.encode(JSON.stringify(data)));
@@ -40,17 +60,18 @@ export function escapeHtmlAttribute(value: string | undefined): string {
  * 歌曲信息全部放进 URL 查询参数（hs-* 前缀），音乐源本身作为链接地址，点击即可试听。
  */
 export function buildMusicLink(song: EditorSong): string {
-  const url = new URL(song.url, "https://local.invalid");
+  const item = normalizeSong(song);
+  const url = new URL(item.url, "https://local.invalid");
   url.searchParams.set("hs-music", "1");
-  url.searchParams.set("hs-name", song.name || "");
-  url.searchParams.set("hs-artist", song.artist || "");
-  url.searchParams.set("hs-cover", song.cover || "");
-  url.searchParams.set("hs-lrc", song.lrc || "");
+  url.searchParams.set("hs-name", item.name || "");
+  url.searchParams.set("hs-artist", item.artist || "");
+  url.searchParams.set("hs-cover", item.cover || "");
+  url.searchParams.set("hs-lrc", item.lrc || "");
   const href =
-    song.url.startsWith("http://") || song.url.startsWith("https://")
+    item.url.startsWith("http://") || item.url.startsWith("https://")
       ? url.toString()
       : `${url.pathname}${url.search}`;
-  const label = song.artist ? `${song.name} - ${song.artist}` : song.name;
+  const label = item.artist ? `${item.name} - ${item.artist}` : item.name;
   return `[♪ ${label}](${href})`;
 }
 
@@ -77,13 +98,14 @@ export function parseMusicLink(href: string): EditorSong | undefined {
 }
 
 export function buildInlineMusicHtml(song: EditorSong): string {
+  const item = normalizeSong(song);
   return [
     '<div class="hs-music-player" data-hs-music',
-    ` data-name="${escapeHtmlAttribute(song.name)}"`,
-    ` data-artist="${escapeHtmlAttribute(song.artist)}"`,
-    ` data-url="${escapeHtmlAttribute(song.url)}"`,
-    ` data-cover="${escapeHtmlAttribute(song.cover)}"`,
-    ` data-lrc="${escapeHtmlAttribute(song.lrc)}"`,
+    ` data-name="${escapeHtmlAttribute(item.name)}"`,
+    ` data-artist="${escapeHtmlAttribute(item.artist)}"`,
+    ` data-url="${escapeHtmlAttribute(item.url)}"`,
+    ` data-cover="${escapeHtmlAttribute(item.cover)}"`,
+    ` data-lrc="${escapeHtmlAttribute(item.lrc)}"`,
     "></div>",
   ].join("");
 }
@@ -151,7 +173,7 @@ export function buildGalleryMarker(gallery: EditorGallery): string {
 }
 
 export function buildMomentMusicMarker(song: EditorSong): string {
-  return `::hs-music:v1:${encodeMarkerData(song)}::`;
+  return `::hs-music:v1:${encodeMarkerData(normalizeSong(song))}::`;
 }
 
 /**

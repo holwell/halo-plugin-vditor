@@ -420,25 +420,66 @@ const removeMomentSong = (index: number) => {
   debounceOnUpdate();
 };
 
-// 取选区的 Markdown 源码：源码模式直接拿文本，富文本/IR 模式把选区 HTML 转回 Markdown，
-// 否则 getSelection() 只返回纯文本，会把 ## 标题 抹平成普通段落。
-const getSelectedMarkdown = (): string => {
-  const instance = vditor.value;
-  if (!instance) return "";
-  const mode = instance.getCurrentMode();
-  if (mode === "sv") return (instance.getSelection() || "").trim();
+// 找到选区所在的顶层块，便于只在块前后插标记，不碰选中内容本身
+const topBlockOf = (node: Node, editor: HTMLElement): HTMLElement | null => {
+  let el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+  while (el && el !== editor && el.parentElement !== editor) el = el.parentElement;
+  return el && el !== editor ? el : null;
+};
 
+// 只在选区前后插 begin/end，不读取、不转换、不重写选中内容
+const wrapSelectionWithSecretMarkers = (instance: NonNullable<typeof vditor.value>): boolean => {
   const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return "";
-  const internal = instance.vditor as unknown as Record<string, { element?: HTMLElement }>;
-  const editorElement = internal?.[mode]?.element;
-  if (!editorElement) return "";
-
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
   const range = selection.getRangeAt(0);
-  if (!editorElement.contains(range.commonAncestorContainer)) return "";
-  const holder = document.createElement("div");
-  holder.appendChild(range.cloneContents());
-  return instance.html2md(holder.innerHTML).trim();
+  const mode = instance.getCurrentMode();
+  const internal = instance.vditor as unknown as Record<string, { element?: HTMLElement }>;
+
+  if (mode === "sv") {
+    const sv = internal?.sv?.element;
+    if (!sv || !sv.contains(range.commonAncestorContainer)) return false;
+    const before = document.createRange();
+    before.selectNodeContents(sv);
+    before.setEnd(range.startContainer, range.startOffset);
+    const through = document.createRange();
+    through.selectNodeContents(sv);
+    through.setEnd(range.endContainer, range.endOffset);
+    const value = instance.getValue();
+    const start = before.toString().length;
+    const end = through.toString().length;
+    const head = value.slice(0, start);
+    const body = value.slice(start, end);
+    const tail = value.slice(end);
+    const headBreak = head && !head.endsWith("\n") ? "\n" : "";
+    const tailBreak = tail && !tail.startsWith("\n") ? "\n" : "";
+    instance.setValue(
+      `${head}${headBreak}${SECRET_EDITOR_START}\n${body}\n${SECRET_EDITOR_END}${tailBreak}${tail}`,
+    );
+    return true;
+  }
+
+  const editor = internal?.[mode]?.element;
+  if (!editor || !editor.contains(range.commonAncestorContainer)) return false;
+  const startBlock = topBlockOf(range.startContainer, editor);
+  const endBlock = topBlockOf(range.endContainer, editor);
+  if (!startBlock || !endBlock) return false;
+
+  const startMarker = document.createElement("p");
+  startMarker.textContent = SECRET_EDITOR_START;
+  const endMarker = document.createElement("p");
+  endMarker.textContent = SECRET_EDITOR_END;
+
+  editor.insertBefore(endMarker, endBlock.nextSibling);
+  editor.insertBefore(startMarker, startBlock);
+
+  // 让光标落在 end 之后，并触发 Vditor 重新序列化
+  const after = document.createRange();
+  after.setStartAfter(endMarker);
+  after.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(after);
+  instance.insertValue("");
+  return true;
 };
 
 // 加密按钮：只把选中内容包成编辑器开闭块，实际加解密全自动
@@ -450,21 +491,14 @@ const markSelectionSecret = () => {
   const instance = vditor.value;
   if (!instance) return;
 
-  const selected = getSelectedMarkdown();
-  if (selected) {
-    instance.deleteValue();
-    const blockMarkdown = buildSecretEditorBlock(selected);
-    const lute = (instance.vditor as unknown as { lute?: { Md2HTML(value: string): string } })?.lute;
-    // 插入 HTML 而不是裸 Markdown，让标题等块级结构在 IR/WYSIWYG 中保持原样
-    const blockHtml = lute?.Md2HTML(blockMarkdown) ?? blockMarkdown;
-    instance.insertValue(`\n${blockHtml}\n`);
+  if (wrapSelectionWithSecretMarkers(instance)) {
     instance.tip("已标记为加密内容，保存时自动加密", 2000);
-  } else {
-    // 未选中：begin / 空段落 / end，序列化后正好是 begin\n\nend
-    const emptyBlock = `<p>${SECRET_EDITOR_START}</p><p><br /></p><p>${SECRET_EDITOR_END}</p>`;
-    instance.insertValue(`\n${emptyBlock}\n`);
-    instance.tip("已在空行处插入加密块，直接输入即可", 2000);
+    return;
   }
+
+  // 未选中：begin、空行、end，空行严格位于两个标记中间
+  instance.insertValue(buildSecretEditorBlock(""));
+  instance.tip("已在空行处插入加密块，直接输入即可", 2000);
 };
 
 const toggleSourceMode = () => {

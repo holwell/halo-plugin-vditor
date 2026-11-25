@@ -604,6 +604,29 @@ const addTagByText = async (payload: { text: string; location: boolean }) => {
   }
 };
 
+/** 分类变更后，重新判定 scope 并重生成 raw 里的标签链接。 */
+const refreshTagScopeLinks = async () => {
+  if (!postName.value) {
+    vditor.value?.tip("新建文章发布后再刷新标签链接。", 2000);
+    return;
+  }
+  if (!allTags.value.length) allTags.value = await loadAllTags();
+  try {
+    isMomentPost.value = await checkPostIsMoment(postName.value);
+    // 编辑区始终是纯文本；重新生成 raw 时会按最新分类决定是否带 scope=moment。
+    await debounceOnUpdate();
+    vditor.value?.tip(
+      isMomentPost.value ? "已按瞬间分类刷新标签链接。" : "已按普通文章刷新标签链接。",
+      1800,
+    );
+  } catch (error) {
+    vditor.value?.tip(
+      error instanceof Error ? `刷新链接失败：${error.message}` : "刷新链接失败。",
+      2500,
+    );
+  }
+};
+
 watch(mediaPreviewShow, (open) => {
   if (open) {
     void ensureTagData(tagsLoaded.value).then(() => analyzeTags());
@@ -1001,6 +1024,7 @@ const update = (val: string | null) => {
       @associate="associateTag"
       @unassociate="unassociateTag"
       @add-by-text="addTagByText"
+      @refresh-scopes="refreshTagScopeLinks"
     />
 
     <AttachmentSelectorModal

@@ -26,6 +26,7 @@
     "</svg>";
 
   var activeTarget = null;
+  // pjax 换页不重载此脚本，密钥跨 pjax 保留；只有整页刷新才会清空。
   var sessionPassword = "";
   var eventsBound = false;
 
@@ -330,15 +331,22 @@
   }
 
   function syncFromTemplate() {
+    // pjax 可能换掉正文节点；若弹窗指向的旧节点已脱离文档，关掉弹窗，
+    // 但保留 sessionPassword，避免同会话内重复输密钥。
+    var modal = document.getElementById(MODAL_ID);
+    if (modal && !modal.hidden && activeTarget && !document.contains(activeTarget)) closeModal(modal);
     var loggedIn = isLoggedIn();
     setLocksEnabled(loggedIn);
     if (loggedIn) bindEvents();
     else unbindEvents();
   }
 
-  // pjax 换页后新插入的加密块需要重新按模板登录态启用
-  document.addEventListener("hs:pjax:complete", syncFromTemplate);
-  document.addEventListener("pjax:complete", syncFromTemplate);
+  // 主题 pjax 在 window 上派发完成事件；这里同时兼容在 document 上派发的实现。
+  // 新插入的加密块需要重新按模板登录态启用，sessionPassword 保持不变以维持同会话免密。
+  ["pjax:complete", "halo:pjax:complete", "hs:pjax:ready", "hs:pjax:complete"].forEach(function (name) {
+    window.addEventListener(name, syncFromTemplate);
+    document.addEventListener(name, syncFromTemplate);
+  });
 
   // 脚本由 PostContentHandler 注入在正文最前面，执行时加密按钮还没进入 DOM，
   // 必须等 DOM 就绪后再移除 disabled，否则登录用户也点不动。

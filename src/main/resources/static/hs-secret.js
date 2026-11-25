@@ -340,5 +340,11 @@
   document.addEventListener("hs:pjax:complete", syncFromTemplate);
   document.addEventListener("pjax:complete", syncFromTemplate);
 
-  syncFromTemplate();
+  // 脚本由 PostContentHandler 注入在正文最前面，执行时加密按钮还没进入 DOM，
+  // 必须等 DOM 就绪后再移除 disabled，否则登录用户也点不动。
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", syncFromTemplate, { once: true });
+  } else {
+    syncFromTemplate();
+  }
 })();

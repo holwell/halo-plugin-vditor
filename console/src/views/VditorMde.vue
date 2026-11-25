@@ -21,6 +21,8 @@ import {
   buildMomentMusicMarker,
   buildSecretEditorBlock,
   decodeSecretRawForEditor,
+  SECRET_EDITOR_END,
+  SECRET_EDITOR_START,
   encodeSecretEditorForRaw,
   extractPendingFromRaw,
   type EditorGallery,
@@ -418,21 +420,50 @@ const removeMomentSong = (index: number) => {
   debounceOnUpdate();
 };
 
+// 取选区的 Markdown 源码：源码模式直接拿文本，富文本/IR 模式把选区 HTML 转回 Markdown，
+// 否则 getSelection() 只返回纯文本，会把 ## 标题 抹平成普通段落。
+const getSelectedMarkdown = (): string => {
+  const instance = vditor.value;
+  if (!instance) return "";
+  const mode = instance.getCurrentMode();
+  if (mode === "sv") return (instance.getSelection() || "").trim();
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return "";
+  const internal = instance.vditor as unknown as Record<string, { element?: HTMLElement }>;
+  const editorElement = internal?.[mode]?.element;
+  if (!editorElement) return "";
+
+  const range = selection.getRangeAt(0);
+  if (!editorElement.contains(range.commonAncestorContainer)) return "";
+  const holder = document.createElement("div");
+  holder.appendChild(range.cloneContents());
+  return instance.html2md(holder.innerHTML).trim();
+};
+
 // 加密按钮：只把选中内容包成编辑器开闭块，实际加解密全自动
 const markSelectionSecret = () => {
   if (!editorConfig.value?.security.encryptionKey) {
     vditor.value?.tip("请先在插件设置中填写加密密钥", 3000);
     return;
   }
-  const selected = vditor.value?.getSelection() || "";
-  if (selected.trim()) {
-    vditor.value?.deleteValue();
-    vditor.value?.insertValue(`\n${buildSecretEditorBlock(selected)}\n`);
-    vditor.value?.tip("已标记为加密内容，保存时自动加密", 2000);
+  const instance = vditor.value;
+  if (!instance) return;
+
+  const selected = getSelectedMarkdown();
+  if (selected) {
+    instance.deleteValue();
+    const blockMarkdown = buildSecretEditorBlock(selected);
+    const lute = (instance.vditor as unknown as { lute?: { Md2HTML(value: string): string } })?.lute;
+    // 插入 HTML 而不是裸 Markdown，让标题等块级结构在 IR/WYSIWYG 中保持原样
+    const blockHtml = lute?.Md2HTML(blockMarkdown) ?? blockMarkdown;
+    instance.insertValue(`\n${blockHtml}\n`);
+    instance.tip("已标记为加密内容，保存时自动加密", 2000);
   } else {
-    // 未选中：插入带空行的开闭块，空行处可直接输入
-    vditor.value?.insertValue(`\n${buildSecretEditorBlock("")}\n`);
-    vditor.value?.tip("已在空行处插入加密块，直接输入即可", 2000);
+    // 未选中：begin / 空段落 / end，序列化后正好是 begin\n\nend
+    const emptyBlock = `<p>${SECRET_EDITOR_START}</p><p><br /></p><p>${SECRET_EDITOR_END}</p>`;
+    instance.insertValue(`\n${emptyBlock}\n`);
+    instance.tip("已在空行处插入加密块，直接输入即可", 2000);
   }
 };
 

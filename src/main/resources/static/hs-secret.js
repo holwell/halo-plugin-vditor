@@ -187,9 +187,9 @@
         endLock.className = "hs-secret-lock hs-secret-end-lock";
         endLock.setAttribute("aria-label", "收起加密内容");
         endLock.innerHTML =
-          "<span class=\"hs-secret-lock-icon\" aria-hidden=\"true\">🔓</span>" +
+          "<span class=\"hs-secret-lock-arrow\" aria-hidden=\"true\">▲</span>" +
           "<span>以上部分仅自己可见</span>" +
-          "<span class=\"hs-secret-lock-arrow\" aria-hidden=\"true\">▲</span>";
+          "<span class=\"hs-secret-lock-icon\" aria-hidden=\"true\">🔓</span>";
         end.appendChild(endLock);
 
         target.__hsSecretContent = content;

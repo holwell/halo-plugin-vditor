@@ -111,7 +111,7 @@
       lock.innerHTML =
         "<span class=\"hs-secret-lock-icon\" aria-hidden=\"true\">🔓</span>" +
         "<span>以下部分仅自己可见</span>" +
-        "<span class=\"hs-secret-lock-arrow\" aria-hidden=\"true\">🔽</span>";
+        "<span class=\"hs-secret-lock-arrow\" aria-hidden=\"true\">▼</span>";
       lock.setAttribute("aria-label", "收起加密内容");
     } else if (target.__hsSecretCollapsedHtml) {
       lock.innerHTML = target.__hsSecretCollapsedHtml;
@@ -189,7 +189,7 @@
         endLock.innerHTML =
           "<span class=\"hs-secret-lock-icon\" aria-hidden=\"true\">🔓</span>" +
           "<span>以上部分仅自己可见</span>" +
-          "<span class=\"hs-secret-lock-arrow\" aria-hidden=\"true\">🔼</span>";
+          "<span class=\"hs-secret-lock-arrow\" aria-hidden=\"true\">▲</span>";
         end.appendChild(endLock);
 
         target.__hsSecretContent = content;

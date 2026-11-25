@@ -15,15 +15,6 @@
   var encoder = new TextEncoder();
   var decoder = new TextDecoder();
 
-  var LOCK_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">' +
-    '<path d="M0 0h24v24H0z" fill="none" />' +
-    '<g fill="none">' +
-    '<path fill="currentColor" d="M3.32 15.25c0-2.83 0-4.24.88-5.12s2.3-.88 5.12-.88h5.36c2.83 0 4.24 0 5.12.88s.88 2.3.88 5.12v.95c0 2.83 0 4.24-.88 5.12s-2.3.88-5.12.88H9.32c-2.83 0-4.24 0-5.12-.88s-.88-2.3-.88-5.12z" opacity=".2" />' +
-    '<path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.8 22.2h4.4c2.8 0 4.2 0 5.15-.75q.31-.26.58-.58c.75-.96.75-2.35.75-5.15c0-2.79 0-4.18-.75-5.14a4 4 0 0 0-.58-.58c-.96-.75-2.35-.75-5.14-.75H9.79c-2.79 0-4.18 0-5.14.75a4 4 0 0 0-.58.58c-.75.96-.75 2.35-.75 5.14c0 2.8 0 4.2.75 5.15q.26.31.58.58c.96.75 2.35.75 5.14.75M7.63 9.25l.47-4.04a3.96 3.96 0 0 1 7.88.04l.43 4" />' +
-    '<path fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13.11 15.44a1.11 1.11 0 1 1-2.22 0a1.11 1.11 0 0 1 2.22 0" />' +
-    "</g>" +
-    "</svg>";
 
   var activeTarget = null;
   // pjax 换页不重载此脚本，密钥跨 pjax 保留；只有整页刷新才会清空。
@@ -112,18 +103,34 @@
     }
   }
 
+  function setTargetLabel(target, expanded) {
+    var lock = target.querySelector(".hs-secret-lock");
+    if (!lock) return;
+    if (expanded) {
+      if (!target.__hsSecretCollapsedHtml) target.__hsSecretCollapsedHtml = lock.innerHTML;
+      lock.innerHTML = "<span>以下内容仅自己可见</span>";
+      lock.setAttribute("aria-label", "收起加密内容");
+    } else if (target.__hsSecretCollapsedHtml) {
+      lock.innerHTML = target.__hsSecretCollapsedHtml;
+      lock.setAttribute("aria-label", "该部分仅登录用户可见");
+    }
+  }
+
   function setOpen(target, open) {
     var content = target.__hsSecretContent;
+    var end = target.__hsSecretEnd;
     if (!content) return;
     var body = content.querySelector(".hs-secret-content-body");
     if (content._toggleTimer) {
       clearTimeout(content._toggleTimer);
       content._toggleTimer = 0;
     }
+    setTargetLabel(target, open);
     if (open) {
-      target.hidden = true;
+      target.hidden = false;
       content.hidden = false;
       content.classList.add("is-open");
+      if (end) end.hidden = false;
       body.style.overflow = "hidden";
       body.style.maxHeight = "0px";
       // 强制一次布局后再展开，确保 transition 生效
@@ -145,12 +152,13 @@
       content._toggleTimer = setTimeout(function () {
         content.hidden = true;
         content.classList.remove("is-open");
-        target.hidden = false;
+        if (end) end.hidden = true;
         body.style.maxHeight = "";
         body.style.overflow = "";
       }, 300);
     }
   }
+
 
   function decryptInto(target, password) {
     return decryptText(target.getAttribute("data-hs-secret") || "", password)
@@ -162,25 +170,31 @@
         content.className = "hs-secret-content";
         content.hidden = true;
 
-        var mark = document.createElement("button");
-        mark.type = "button";
-        mark.className = "hs-secret-content-mark";
-        mark.setAttribute("aria-label", "收起加密内容");
-        mark.title = "收起加密内容";
-        mark.innerHTML = LOCK_SVG;
-
         var body = document.createElement("div");
         body.className = "hs-secret-content-body";
         body.innerHTML = html;
-
-        content.appendChild(mark);
         content.appendChild(body);
+
+        var end = document.createElement("p");
+        end.className = "hs-secret hs-secret-end";
+        end.hidden = true;
+        end.__hsSecretTarget = target;
+        var endLock = document.createElement("button");
+        endLock.type = "button";
+        endLock.className = "hs-secret-lock hs-secret-end-lock";
+        endLock.setAttribute("aria-label", "收起加密内容");
+        endLock.innerHTML = "<span>以上内容仅自己可见</span>";
+        end.appendChild(endLock);
+
         target.__hsSecretContent = content;
+        target.__hsSecretEnd = end;
         target.parentNode.insertBefore(content, target.nextSibling);
+        target.parentNode.insertBefore(end, content.nextSibling);
         setOpen(target, true);
         rerenderMath();
       });
   }
+
 
   function ensureModal() {
     var modal = document.getElementById(MODAL_ID);
@@ -263,12 +277,11 @@
       return;
     }
 
-    var mark = event.target.closest(".hs-secret-content-mark");
-    if (mark) {
-      var content = mark.closest(".hs-secret-content");
-      if (content && content.previousElementSibling) {
-        setOpen(content.previousElementSibling, false);
-      }
+    var endLock = event.target.closest(".hs-secret-end-lock");
+    if (endLock && !endLock.disabled) {
+      var endHost = endLock.closest(".hs-secret");
+      var endTarget = endHost && endHost.__hsSecretTarget;
+      if (endTarget) setOpen(endTarget, false);
       return;
     }
 
@@ -277,7 +290,8 @@
       var target = lock.closest(".hs-secret");
       if (!target) return;
       if (target.__hsSecretContent) {
-        setOpen(target, true);
+        var content = target.__hsSecretContent;
+        setOpen(target, !content.classList.contains("is-open"));
         return;
       }
       if (!sessionPassword) {
@@ -300,6 +314,7 @@
       confirm(modal);
     }
   }
+
 
   function onKeydown(event) {
     if (!isLoggedIn() || event.key !== "Escape") return;

@@ -28,6 +28,18 @@ import {
   type EditorGallery,
   type EditorSong,
 } from "@/utils/marker-utils";
+import {
+  autoMatchTagNames,
+  fetchPostTagNames,
+  findOrCreateTag,
+  getPostNameFromRoute,
+  linkTagsInMarkdown,
+  loadAllTags,
+  matchLocationTags,
+  plainBodyForMatch,
+  pushTagAssociations,
+  type TagInfo,
+} from "@/utils/tag-utils";
 import { quickInsertInject } from "@/utils/quick-insert-utils";
 import { getOptions, renderHTMLFromMarkdownHtml } from "@/utils/vditor-utils";
 import type { Attachment } from "@halo-dev/api-client";
@@ -118,6 +130,19 @@ const debugMode = ref<boolean>(false);
 // 防止内部标题更新触发updateContent
 const internalTitle = ref<string>("");
 
+// 瞬间标签与位置：只在瞬间弹窗打开时匹配，raw 生成时才替换正文链接
+const postName = ref(getPostNameFromRoute());
+const allTags = ref<TagInfo[]>([]);
+const associatedTags = ref<Set<string>>(new Set());
+const matchedTags = ref<Set<string>>(new Set());
+const candidateTags = ref<Set<string>>(new Set());
+const locOrder = ref<string[]>([]);
+const tagsLoaded = ref(false);
+let tagAnalyzeTimer: number | null = null;
+let tagSyncTimer: number | null = null;
+let tagSyncInFlight = false;
+let lastSyncedTagsKey = "";
+
 const emit = defineEmits<{
   (event: "update:raw", value: string): void;
   (event: "update:content", value: string): void;
@@ -156,6 +181,14 @@ const debounceOnUpdate = async () => {
     internalTitle.value = firstLine.substring(2);
     emit("update:title", internalTitle.value);
     value = value.substring(firstLine.length + 2);
+  }
+
+  // 只在生成 raw 时替换正文链接，编辑区始终保持用户原文。
+  // 新建文章没有路由 name，暂时不做匹配/链接替换，发布后重新编辑再处理。
+  if (postName.value && allTags.value.length) {
+    const plain = plainBodyForMatch(value, allTags.value);
+    const locationLinks = matchLocationTags(plain, allTags.value);
+    value = linkTagsInMarkdown(plain, allTags.value, new Set(associatedTags.value), locationLinks, true);
   }
 
   const password = editorConfig.value?.security.encryptionKey || "";
@@ -420,6 +453,138 @@ const removeMomentSong = (index: number) => {
   debounceOnUpdate();
 };
 
+const orderedTagNames = (): string[] => {
+  const orderedLocs = locOrder.value.filter((name) => associatedTags.value.has(name));
+  const rest = Array.from(associatedTags.value).filter((name) => !orderedLocs.includes(name));
+  return [...orderedLocs, ...rest];
+};
+
+const analyzeTags = () => {
+  const editorValue = vditor.value?.getValue() || "";
+  const plain = plainBodyForMatch(editorValue, allTags.value);
+  const normalMatches = autoMatchTagNames(plain, allTags.value);
+  const locationMatches = matchLocationTags(plain, allTags.value);
+  // 展示用 matchedTags 同时包含普通标签与位置标签，决定已关联 chip 的深色/浅色；
+  // 候选行仍只放普通标签，位置保持手动输入或联想关联。
+  matchedTags.value = new Set([...normalMatches, ...locationMatches].map((tag) => tag.name));
+  candidateTags.value = new Set(
+    normalMatches
+      .map((tag) => tag.name)
+      .filter((name) => !associatedTags.value.has(name)),
+  );
+  const missingLocOrder = allTags.value
+    .filter(
+      (tag) => tag.location && associatedTags.value.has(tag.name) && !locOrder.value.includes(tag.name),
+    )
+    .map((tag) => tag.name);
+  if (missingLocOrder.length) locOrder.value = [...locOrder.value, ...missingLocOrder];
+};
+
+const scheduleTagAnalyze = () => {
+  if (!mediaPreviewShow.value || !tagsLoaded.value) return;
+  if (tagAnalyzeTimer !== null) window.clearTimeout(tagAnalyzeTimer);
+  tagAnalyzeTimer = window.setTimeout(() => {
+    tagAnalyzeTimer = null;
+    analyzeTags();
+  }, 400);
+};
+
+const scheduleTagSync = () => {
+  if (!postName.value) return;
+  if (orderedTagNames().join("\u0000") === lastSyncedTagsKey) return;
+  if (tagSyncTimer !== null) window.clearTimeout(tagSyncTimer);
+  tagSyncTimer = window.setTimeout(() => {
+    tagSyncTimer = null;
+    void pushAssociations();
+  }, 700);
+};
+
+const pushAssociations = async () => {
+  if (!postName.value || tagSyncInFlight) return;
+  const tags = orderedTagNames();
+  const key = tags.join("\u0000");
+  if (key === lastSyncedTagsKey) return;
+  tagSyncInFlight = true;
+  try {
+    await pushTagAssociations(postName.value, tags);
+    lastSyncedTagsKey = key;
+  } catch (error) {
+    vditor.value?.tip(
+      error instanceof Error ? `标签关联失败：${error.message}` : "标签关联失败。",
+      2500,
+    );
+  } finally {
+    tagSyncInFlight = false;
+    if (orderedTagNames().join("\u0000") !== lastSyncedTagsKey) scheduleTagSync();
+  }
+};
+
+const ensureTagData = async () => {
+  if (tagsLoaded.value) return;
+  allTags.value = await loadAllTags();
+  if (postName.value) {
+    const names = await fetchPostTagNames(postName.value);
+    associatedTags.value = new Set(names);
+    locOrder.value = names.filter((name) =>
+      allTags.value.some((tag) => tag.name === name && tag.location),
+    );
+    lastSyncedTagsKey = orderedTagNames().join("\u0000");
+  }
+  tagsLoaded.value = true;
+};
+
+const associateTag = (name: string) => {
+  if (!allTags.value.some((tag) => tag.name === name) || associatedTags.value.has(name)) return;
+  const next = new Set(associatedTags.value);
+  next.add(name);
+  associatedTags.value = next;
+  candidateTags.value = new Set(Array.from(candidateTags.value).filter((item) => item !== name));
+  const tag = allTags.value.find((item) => item.name === name);
+  if (tag?.location && !locOrder.value.includes(name)) locOrder.value = [...locOrder.value, name];
+  analyzeTags();
+  scheduleTagSync();
+};
+
+const unassociateTag = (name: string) => {
+  if (!associatedTags.value.has(name)) return;
+  const next = new Set(associatedTags.value);
+  next.delete(name);
+  associatedTags.value = next;
+  locOrder.value = locOrder.value.filter((item) => item !== name);
+  analyzeTags();
+  scheduleTagSync();
+};
+
+const addTagByText = async (payload: { text: string; location: boolean }) => {
+  if (!payload.text.trim()) return;
+  try {
+    const tag = await findOrCreateTag(payload.text, payload.location, allTags.value);
+    allTags.value = [...allTags.value];
+    associateTag(tag.name);
+  } catch (error) {
+    vditor.value?.tip(
+      error instanceof Error ? `创建标签失败：${error.message}` : "创建标签失败。",
+      2500,
+    );
+  }
+};
+
+watch(mediaPreviewShow, (open) => {
+  if (open) {
+    void ensureTagData().then(() => analyzeTags());
+    return;
+  }
+  if (tagAnalyzeTimer !== null) {
+    window.clearTimeout(tagAnalyzeTimer);
+    tagAnalyzeTimer = null;
+  }
+  if (tagSyncTimer !== null) {
+    window.clearTimeout(tagSyncTimer);
+    tagSyncTimer = null;
+    void pushAssociations();
+  }
+});
+
 // 找到选区所在的顶层块，便于只在块前后插标记，不碰选中内容本身
 const topBlockOf = (node: Node, editor: HTMLElement): HTMLElement | null => {
   let el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
@@ -533,6 +698,14 @@ onUnmounted(async () => {
   removeFullscreenToken();
   document.querySelectorAll("script[id^='vditor']").forEach((el) => el.remove());
   document.querySelectorAll("link[id^='vditor']").forEach((el) => el.remove());
+  if (tagAnalyzeTimer !== null) {
+    window.clearTimeout(tagAnalyzeTimer);
+    tagAnalyzeTimer = null;
+  }
+  if (tagSyncTimer !== null) {
+    window.clearTimeout(tagSyncTimer);
+    tagSyncTimer = null;
+  }
   vditorLoaded.value = false;
 });
 
@@ -601,7 +774,10 @@ onMounted(async () => {
         vditorLoaded.value = true;
         debounceOnUpdate();
       },
-      input: debounceOnUpdate,
+      input: () => {
+        void debounceOnUpdate();
+        scheduleTagAnalyze();
+      },
       showAttachment: () => {
         openAttachmentPicker("image");
       },
@@ -776,11 +952,20 @@ const update = (val: string | null) => {
       :open="mediaPreviewShow"
       :gallery-images="pendingGallery.images"
       :moment-songs="pendingMomentSongs"
+      :all-tags="allTags"
+      :associated-names="Array.from(associatedTags)"
+      :matched-names="Array.from(matchedTags)"
+      :candidate-names="Array.from(candidateTags)"
+      :loc-order="locOrder"
+      :post-name="postName"
       @close="mediaPreviewShow = false"
       @edit-gallery="editGalleryFromPreview"
       @edit-moment="editMomentFromPreview"
       @remove-gallery="removeGalleryImage"
       @remove-moment="removeMomentSong"
+      @associate="associateTag"
+      @unassociate="unassociateTag"
+      @add-by-text="addTagByText"
     />
 
     <AttachmentSelectorModal

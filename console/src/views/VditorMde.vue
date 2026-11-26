@@ -292,6 +292,9 @@ const openSongPicker = (mode: "inline" | "moment") => {
 const songSearchApi = computed(
   () => editorConfig.value?.extension.searchApi || defaultEditorConfig.extension.searchApi,
 );
+const songResolveApi = computed(
+  () => editorConfig.value?.extension.resolveApi || defaultEditorConfig.extension.resolveApi,
+);
 
 const selectSong = (song: EditorSong) => {
   if (songPickerMode.value === "moment") {
@@ -982,6 +985,7 @@ const update = (val: string | null) => {
     <SongPickerModal
       :open="songPickerShow"
       :search-api="songSearchApi"
+      :resolve-api="songResolveApi"
       @close="songPickerShow = false"
       @select="selectSong"
     />

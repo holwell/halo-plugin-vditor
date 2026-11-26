@@ -97,6 +97,11 @@ spec:
           label: 歌曲搜索接口
           help: 编辑器「插入音乐 / 瞬间音乐」按关键词搜索歌曲的接口；默认使用 aplayer-backend 插件的搜索接口。
           value: "/apis/api.aplayer-backend/v1alpha1/search"
+        - $formkit: text
+          name: resolveApi
+          label: 歌曲 ID 解析接口
+          help: 编辑器粘贴歌曲 ID 或音乐平台分享链接时，用于精确解析歌曲信息的接口；默认使用 aplayer-backend 插件的解析接口。
+          value: "/apis/api.aplayer-backend/v1alpha1/resolve"
     - group: security
       label: 内容加密
       formSchema:

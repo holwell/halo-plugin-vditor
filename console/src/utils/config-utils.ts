@@ -16,6 +16,7 @@ export declare type EditorConfig = {
   extension: {
     allowImageType: string;
     searchApi: string;
+    resolveApi: string;
   };
   security: {
     encryptionKey: string;
@@ -47,6 +48,7 @@ export const defaultEditorConfig: EditorConfig = {
   extension: {
     allowImageType: "png,jpg,jpeg,bmp,gif,webp,svg",
     searchApi: "/apis/api.aplayer-backend/v1alpha1/search",
+    resolveApi: "/apis/api.aplayer-backend/v1alpha1/resolve",
   },
   security: {
     encryptionKey: "",

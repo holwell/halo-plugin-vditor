@@ -14,6 +14,8 @@ const props = defineProps<{
   candidateNames: string[];
   locOrder: string[];
   postName: string;
+  /** 标签写请求进行中：冻结所有交互，避免中途退出或重复点击 */
+  pending?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -86,12 +88,14 @@ const locSuggestions = computed(() => {
 });
 
 const associateSuggestion = (name: string, location: boolean) => {
+  if (props.pending) return;
   emit("associate", name);
   if (location) locInput.value = "";
   else tagInput.value = "";
 };
 
 const submitInput = (event: KeyboardEvent, location: boolean) => {
+  if (props.pending) return;
   if (event.isComposing || event.keyCode === 229) return;
   const target = event.target as HTMLInputElement;
   if (event.key === "Backspace" && !target.value) {
@@ -111,11 +115,20 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="hs-media-mask" @click.self="emit('close')">
+    <div v-if="open" class="hs-media-mask" :class="{ 'is-pending': pending }" @click.self="!pending && emit('close')">
       <div class="hs-media-modal" role="dialog" aria-modal="true" aria-label="瞬间内容">
         <div class="hs-media-head">
-          <span></span>
-          <button type="button" class="hs-media-close" aria-label="关闭" @click="emit('close')">×</button>
+          <span v-if="pending" class="hs-media-pending-hint">正在同步标签…请勿关闭</span>
+          <span v-else></span>
+          <button
+            type="button"
+            class="hs-media-close"
+            aria-label="关闭"
+            :disabled="pending"
+            @click="emit('close')"
+          >
+            ×
+          </button>
         </div>
 
         <div class="hs-media-row">
@@ -127,6 +140,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
               type="button"
               class="hs-tag-chip is-candidate"
               :title="`点击关联「${tag.displayName}」`"
+              :disabled="pending"
               @click="emit('associate', tag.name)"
             >
               #{{ tag.displayName }}
@@ -139,6 +153,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
             type="button"
             class="hs-media-label is-action"
             title="按当前文章分类重新刷新正文里的标签链接"
+            :disabled="pending"
             @click="emit('refreshScopes')"
           >
             当前标签
@@ -151,6 +166,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
               class="hs-tag-chip is-associated"
               :class="matched(tag.name) ? 'is-matched' : 'is-unmatched'"
               :title="`点击取消关联「${tag.displayName}」`"
+              :disabled="pending"
               @click="emit('unassociate', tag.name)"
             >
               #{{ tag.displayName }}<span class="hs-tag-chip-remove">×</span>
@@ -161,6 +177,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
                 class="hs-tag-input"
                 type="text"
                 placeholder="标签"
+                :disabled="pending"
                 @keydown="submitInput($event, false)"
               />
               <div v-if="tagSuggestions.length" class="hs-tag-suggest">
@@ -168,6 +185,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
                   v-for="tag in tagSuggestions"
                   :key="tag.name"
                   type="button"
+                  :disabled="pending"
                   @mousedown.prevent
                   @click="associateSuggestion(tag.name, false)"
                 >
@@ -188,6 +206,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
               class="hs-tag-chip is-associated is-location"
               :class="matched(tag.name) ? 'is-matched' : 'is-unmatched'"
               :title="`点击取消位置「${tag.matchText}」`"
+              :disabled="pending"
               @click="emit('unassociate', tag.name)"
             >
               <span class="hs-chip-icon" v-html="LOCATION_ICON"></span>
@@ -199,6 +218,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
                 class="hs-tag-input"
                 type="text"
                 placeholder="位置"
+                :disabled="pending"
                 @keydown="submitInput($event, true)"
               />
               <div v-if="locSuggestions.length" class="hs-tag-suggest">
@@ -206,6 +226,7 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
                   v-for="tag in locSuggestions"
                   :key="tag.name"
                   type="button"
+                  :disabled="pending"
                   @mousedown.prevent
                   @click="associateSuggestion(tag.name, true)"
                 >
@@ -225,10 +246,10 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
               <ul v-if="momentSongs.length" class="hs-media-songs">
                 <li v-for="(song, index) in momentSongs" :key="`${song.url}-${index}`">
                   <span>{{ song.name }}<em v-if="song.artist"> - {{ song.artist }}</em></span>
-                  <button type="button" class="hs-media-remove-inline" title="移除" @click="emit('removeMoment', index)">×</button>
+                  <button type="button" class="hs-media-remove-inline" title="移除" :disabled="pending" @click="emit('removeMoment', index)">×</button>
                 </li>
               </ul>
-              <button type="button" class="hs-media-add" title="添加瞬间音乐" @click="emit('editMoment')">添加</button>
+              <button type="button" class="hs-media-add" title="添加瞬间音乐" :disabled="pending" @click="emit('editMoment')">添加</button>
             </div>
           </div>
         </div>
@@ -238,12 +259,12 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
           <div class="hs-media-value">
             <div class="hs-media-inline">
               <span class="hs-media-icon" v-html="GRID_ICON"></span>
-              <button type="button" class="hs-media-add" title="添加九宫格图片" @click="emit('editGallery')">添加</button>
+              <button type="button" class="hs-media-add" title="添加九宫格图片" :disabled="pending" @click="emit('editGallery')">添加</button>
             </div>
             <div v-if="galleryImages.length" class="hs-media-grid">
               <div v-for="(url, index) in galleryImages" :key="`${url}-${index}`" class="hs-media-thumb">
                 <img :src="url" alt="" />
-                <button type="button" class="hs-media-remove" title="移除" @click="emit('removeGallery', index)">×</button>
+                <button type="button" class="hs-media-remove" title="移除" :disabled="pending" @click="emit('removeGallery', index)">×</button>
               </div>
             </div>
           </div>
@@ -257,11 +278,24 @@ const submitInput = (event: KeyboardEvent, location: boolean) => {
 .hs-media-mask {
   position: fixed;
   inset: 0;
-  z-index: 2050;
+  /* 与音乐弹框同处高位段，音乐框 10010 再高一级，保证从本面板打开时盖在其上 */
+  z-index: 10000;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.45);
+}
+
+/* 标签写请求期间：整块面板冻结，避免中途点击退出造成"显示已添加但实际没成功" */
+.hs-media-mask.is-pending .hs-media-modal {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.hs-media-pending-hint {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.7;
 }
 
 .hs-media-modal {

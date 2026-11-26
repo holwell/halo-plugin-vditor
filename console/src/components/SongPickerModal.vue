@@ -226,7 +226,8 @@ onBeforeUnmount(clearTimer);
 .hs-song-mask {
   position: fixed;
   inset: 0;
-  z-index: 2200;
+  /* 抬到独立高位段，避免与瞬间面板、Halo 后台浮层在同一层级竞争导致偶发被盖住 */
+  z-index: 10010;
   display: flex;
   align-items: center;
   justify-content: center;

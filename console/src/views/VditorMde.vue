@@ -140,9 +140,9 @@ const locOrder = ref<string[]>([]);
 const tagsLoaded = ref(false);
 const isMomentPost = ref(false);
 let tagAnalyzeTimer: number | null = null;
-let tagSyncTimer: number | null = null;
-let tagSyncInFlight = false;
 let lastSyncedTagsKey = "";
+/** 标签写请求进行中：冻结面板交互，避免退出/并发导致显示与实际不一致 */
+const tagPending = ref(false);
 
 const emit = defineEmits<{
   (event: "update:raw", value: string): void;
@@ -479,34 +479,81 @@ const scheduleTagAnalyze = () => {
   }, 400);
 };
 
-const scheduleTagSync = () => {
-  if (!postName.value) return;
-  if (orderedTagNames().join("\u0000") === lastSyncedTagsKey) return;
-  if (tagSyncTimer !== null) window.clearTimeout(tagSyncTimer);
-  tagSyncTimer = window.setTimeout(() => {
-    tagSyncTimer = null;
-    void pushAssociations();
-  }, 700);
-};
+/**
+ * 标签写操作的统一入口：请求期间冻结面板，成功后才落地本地状态，失败则回滚到服务端真实状态。
+ * nextAssociated / nextLocOrder 为目标状态，写请求成功前绝不改动 UI。
+ */
+const commitTagWrite = async (
+  nextAssociated: Set<string>,
+  nextLocOrder: string[],
+  failLabel: string,
+): Promise<boolean> => {
+  if (tagPending.value) return false;
+  if (!postName.value) {
+    vditor.value?.tip("新建文章发布后再操作标签。", 2500);
+    return false;
+  }
+  const ordered = [
+    ...nextLocOrder.filter((name) => nextAssociated.has(name)),
+    ...Array.from(nextAssociated).filter((name) => !nextLocOrder.includes(name)),
+  ];
 
-const pushAssociations = async () => {
-  if (!postName.value || tagSyncInFlight) return;
-  const tags = orderedTagNames();
-  const key = tags.join("\u0000");
-  if (key === lastSyncedTagsKey) return;
-  tagSyncInFlight = true;
+  tagPending.value = true;
   try {
-    await pushTagAssociations(postName.value, tags);
-    lastSyncedTagsKey = key;
+    await pushTagAssociations(postName.value, ordered);
+    // 写成功后才同步本地状态，视图像素级与服务端一致
+    lastSyncedTagsKey = ordered.join("\u0000");
+    associatedTags.value = nextAssociated;
+    locOrder.value = nextLocOrder;
+    analyzeTags();
+    void debounceOnUpdate();
+    return true;
   } catch (error) {
     vditor.value?.tip(
-      error instanceof Error ? `标签关联失败：${error.message}` : "标签关联失败。",
+      `${failLabel}：${error instanceof Error ? error.message : "请重试"}`,
       2500,
     );
+    // 失败：重新拉取两端真实状态，撤销乐观变化和挂起项
+    try {
+      await reloadTagStateFromServer();
+    } catch {
+      /* 拉取失败时保留现状，用户可重开面板再试 */
+    }
+    return false;
   } finally {
-    tagSyncInFlight = false;
-    if (orderedTagNames().join("\u0000") !== lastSyncedTagsKey) scheduleTagSync();
+    tagPending.value = false;
   }
+};
+
+/** 失败回滚：从服务端重新读取标签与文章的关联状态。 */
+const reloadTagStateFromServer = async () => {
+  if (!postName.value) return;
+  const names = await fetchPostTagNames(postName.value);
+  allTags.value = await loadAllTags();
+  names.forEach((name) => {
+    if (!allTags.value.some((tag) => tag.name === name)) {
+      const location = /^loc[_-]/i.test(name);
+      const matchText = name.replace(/^loc[_-]/i, "");
+      allTags.value = [
+        ...allTags.value,
+        {
+          name,
+          displayName: location ? matchText : name,
+          slug: name,
+          permalink: `/tags/${name}`,
+          location,
+          matchText,
+        },
+      ];
+    }
+  });
+  associatedTags.value = new Set(names);
+  locOrder.value = names.filter((name) =>
+    allTags.value.some((tag) => tag.name === name && tag.location),
+  );
+  lastSyncedTagsKey = orderedTagNames().join("\u0000");
+  candidateTags.value = new Set();
+  analyzeTags();
 };
 
 const ensureTagData = async (force = false) => {
@@ -548,41 +595,69 @@ const ensureTagData = async (force = false) => {
 };
 
 const associateTag = (name: string) => {
+  if (tagPending.value) return;
   if (!allTags.value.some((tag) => tag.name === name) || associatedTags.value.has(name)) return;
   const next = new Set(associatedTags.value);
   next.add(name);
-  associatedTags.value = next;
-  candidateTags.value = new Set(Array.from(candidateTags.value).filter((item) => item !== name));
   const tag = allTags.value.find((item) => item.name === name);
-  if (tag?.location && !locOrder.value.includes(name)) locOrder.value = [...locOrder.value, name];
-  analyzeTags();
-  void debounceOnUpdate();
-  scheduleTagSync();
+  const nextLocOrder =
+    tag?.location && !locOrder.value.includes(name) ? [...locOrder.value, name] : [...locOrder.value];
+  // 状态在写成功后由 commitTagWrite 落地；失败则回滚，期间面板冻结
+  void commitTagWrite(next, nextLocOrder, "标签关联失败");
 };
 
 const unassociateTag = (name: string) => {
+  if (tagPending.value) return;
   if (!associatedTags.value.has(name)) return;
   const next = new Set(associatedTags.value);
   next.delete(name);
-  associatedTags.value = next;
-  locOrder.value = locOrder.value.filter((item) => item !== name);
-  analyzeTags();
-  void debounceOnUpdate();
-  scheduleTagSync();
+  const nextLocOrder = locOrder.value.filter((item) => item !== name);
+  void commitTagWrite(next, nextLocOrder, "取消标签失败");
 };
 
 const addTagByText = async (payload: { text: string; location: boolean }) => {
-  if (!payload.text.trim()) return;
+  if (tagPending.value || !payload.text.trim()) return;
+  if (!postName.value) {
+    vditor.value?.tip("新建文章发布后再添加标签。", 2500);
+    return;
+  }
+  tagPending.value = true;
   try {
+    // 第一步：创建 / 复用标签（本身是一次写请求）
     const tag = await findOrCreateTag(payload.text, payload.location, allTags.value);
+    // 第二步：把新标签关联到文章（另一次写请求）
+    const next = new Set(associatedTags.value);
+    next.add(tag.name);
+    const nextLocOrder =
+      tag.location && !locOrder.value.includes(tag.name)
+        ? [...locOrder.value, tag.name]
+        : [...locOrder.value];
+    const ordered = [
+      ...nextLocOrder.filter((name) => next.has(name)),
+      ...Array.from(next).filter((name) => !nextLocOrder.includes(name)),
+    ];
+    await pushTagAssociations(postName.value, ordered);
+
+    // 两步都成功，才一次性落地所有本地状态
+    lastSyncedTagsKey = ordered.join("\u0000");
     allTags.value = [...allTags.value];
-    associateTag(tag.name);
+    associatedTags.value = next;
+    locOrder.value = nextLocOrder;
+    candidateTags.value = new Set(Array.from(candidateTags.value).filter((item) => item !== tag.name));
+    analyzeTags();
     void debounceOnUpdate();
   } catch (error) {
     vditor.value?.tip(
-      error instanceof Error ? `创建标签失败：${error.message}` : "创建标签失败。",
+      error instanceof Error ? `添加标签失败：${error.message}` : "添加标签失败。",
       2500,
     );
+    try {
+      await reloadTagStateFromServer();
+    } catch {
+      /* 拉取失败时保留现状，用户可重开面板再试 */
+    }
+  } finally {
+    tagPending.value = false;
   }
 };
 
@@ -617,11 +692,6 @@ watch(mediaPreviewShow, (open) => {
   if (tagAnalyzeTimer !== null) {
     window.clearTimeout(tagAnalyzeTimer);
     tagAnalyzeTimer = null;
-  }
-  if (tagSyncTimer !== null) {
-    window.clearTimeout(tagSyncTimer);
-    tagSyncTimer = null;
-    void pushAssociations();
   }
 });
 
@@ -741,10 +811,6 @@ onUnmounted(async () => {
   if (tagAnalyzeTimer !== null) {
     window.clearTimeout(tagAnalyzeTimer);
     tagAnalyzeTimer = null;
-  }
-  if (tagSyncTimer !== null) {
-    window.clearTimeout(tagSyncTimer);
-    tagSyncTimer = null;
   }
   vditorLoaded.value = false;
 });
@@ -999,6 +1065,7 @@ const update = (val: string | null) => {
       :candidate-names="Array.from(candidateTags)"
       :loc-order="locOrder"
       :post-name="postName"
+      :pending="tagPending"
       @close="mediaPreviewShow = false"
       @edit-gallery="editGalleryFromPreview"
       @edit-moment="editMomentFromPreview"
